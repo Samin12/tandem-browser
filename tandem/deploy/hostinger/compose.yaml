@@ -1,0 +1,75 @@
+# Tandem Browser for a Hostinger VPS built from the "Ubuntu 24.04 with Docker and
+# Traefik" template, deployed as an hPanel Docker Manager project.
+#
+# Self-contained on purpose: Docker Manager stores only this file and the
+# project's .env, so the restore policy is inline and the gateway is built
+# straight from the repository at TANDEM_REF. The template's Traefik (host
+# network, Let's Encrypt resolver "letsencrypt") terminates HTTPS and reaches the
+# gateway on the neo container's address; no host port is published.
+#
+# .env (Docker Manager "environment"): TANDEM_HOST, TANDEM_REF, TANDEM_NEO_IMAGE,
+# and the gateway's TANDEM_* settings (see ../.env.example). Escape every "$" in
+# TANDEM_PASSWORD_HASH as "$$".
+x-logging: &logging
+  driver: json-file
+  options: {max-size: 10m, max-file: '3'}
+services:
+  neo:
+    image: ${TANDEM_NEO_IMAGE:?Set TANDEM_NEO_IMAGE (tandem/deploy/neo-image.env)}
+    hostname: neo
+    shm_size: 1g
+    stop_grace_period: 45s
+    restart: unless-stopped
+    environment:
+      NEO_SCREEN: ${NEO_SCREEN:-1600x1000}
+      PUID: '1000'
+      PGID: '1000'
+    volumes:
+      - neo-data:/data
+    configs:
+      - source: tandem-restore-policy
+        target: /etc/chromium/policies/managed/tandem-restore.json
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.tandem.rule=Host(`${TANDEM_HOST:?Set TANDEM_HOST}`)
+      - traefik.http.routers.tandem.entrypoints=websecure
+      - traefik.http.routers.tandem.tls.certresolver=letsencrypt
+      - traefik.http.routers.tandem.middlewares=tandem-hsts
+      - traefik.http.middlewares.tandem-hsts.headers.stsSeconds=31536000
+      - traefik.http.middlewares.tandem-hsts.headers.stsIncludeSubdomains=false
+      - traefik.http.services.tandem.loadbalancer.server.port=8790
+    logging: *logging
+  gateway:
+    image: tandem-gateway:${TANDEM_REF:?Set TANDEM_REF}
+    build:
+      context: https://github.com/Samin12/tandem-browser.git#${TANDEM_REF}:tandem
+      dockerfile: gateway/Dockerfile
+    network_mode: service:neo
+    depends_on:
+      neo: {condition: service_healthy, restart: true}
+    env_file: .env
+    environment:
+      TANDEM_ENV: production
+      TANDEM_DATA_DIR: /var/lib/tandem
+      TANDEM_PUBLIC_ORIGIN: https://${TANDEM_HOST}
+    volumes:
+      - gateway-data:/var/lib/tandem
+    read_only: true
+    tmpfs: ['/tmp:rw,noexec,nosuid,size=64m']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'bun', '-e', 'const r=await fetch("http://127.0.0.1:8790/api/health");const h=await r.json();process.exit(r.ok&&h.ok&&h.cdp&&h.mcp?0:1)']
+      interval: 10s
+      timeout: 5s
+      start_period: 120s
+      retries: 6
+    logging: *logging
+configs:
+  tandem-restore-policy:
+    content: |
+      {"RestoreOnStartup": 1}
+volumes:
+  neo-data:
+  gateway-data:
