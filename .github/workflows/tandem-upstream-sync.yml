@@ -30,7 +30,7 @@ jobs:
           if [[ -z "$SYNC_TOKEN" ]]; then
             echo '::warning::TANDEM_SYNC_TOKEN is missing. GITHUB_TOKEN may not push upstream workflow changes and PRs it opens will NOT trigger CI. Add the fine-grained PAT documented in UPSTREAM.md.'
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: main
           fetch-depth: 0
