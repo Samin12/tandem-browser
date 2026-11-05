@@ -10,6 +10,7 @@ import { Cdp } from './cdp';
 import { Screencasts } from './screencast';
 import { copySelection, inputCommand } from './input';
 import { McpProxy } from './mcp';
+import { parkPointer } from './pointer';
 import { RfbFilter, CUT_TEXT_LIMIT } from './rfb';
 import { Follow } from './follow';
 
@@ -35,9 +36,13 @@ export function createGateway(config: Config) {
   cdp.on('tabs', () => { if (!tabsTimer) tabsTimer = setTimeout(() => { tabsTimer = undefined; broadcast(tabs()); }, 25); });
   cdp.on('activity', value => { follow.activity(value.targetId); broadcast(tabs()); broadcast({ ...value, tool: control.lastAgentTool?.name ?? value.tool }); });
   cdp.on('dialog', value => broadcast(value));
+  let lastController = control.controller;
   control.onChange = () => {
     for (const ws of viewers) send(ws, { t: 'control', ...control.state(ws.data.sessionId) });
     follow.changed();
+    // A person just handed back: park the X pointer so watchers don't see a frozen arrow.
+    if (lastController === 'human' && control.controller === 'agent') void parkPointer();
+    lastController = control.controller;
   };
   sessions.onRevoke = id => {
     for (const ws of [...viewers, ...desktops]) if (ws.data.sessionId === id) { follow.set(ws, false); ws.close(4401, 'Session expired'); }
@@ -255,6 +260,7 @@ export function createGateway(config: Config) {
     }
   }, 1000);
   cdp.start(); mcp.start(); log('gateway.started', { port: server.port! });
+  if (control.controller === 'agent') void parkPointer();
   return { server, sessions, control, cdp, mcp, audit, async close() {
     clearInterval(timer); clearTimeout(tabsTimer); follow.close(); mcp.close(); screencasts.close(); cdp.close();
     for (const ws of [...viewers, ...desktops]) ws.terminate();
