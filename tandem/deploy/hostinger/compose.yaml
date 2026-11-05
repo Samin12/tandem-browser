@@ -41,6 +41,8 @@ services:
     logging: *logging
   gateway:
     image: tandem-gateway:${TANDEM_REF:?Set TANDEM_REF}
+    # Docker Manager pulls instead of building; this makes compose build it.
+    pull_policy: build
     build:
       context: https://github.com/Samin12/tandem-browser.git#${TANDEM_REF}:tandem
       dockerfile: gateway/Dockerfile
