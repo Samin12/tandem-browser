@@ -14,6 +14,8 @@ COPY gateway/src ./src
 
 FROM oven/bun:1-slim
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends iproute2 && rm -rf /var/lib/apt/lists/*
+COPY gateway/scripts/neo-net.sh /app/neo-net.sh
 RUN groupadd --gid 10001 tandem && useradd --uid 10001 --gid 10001 --no-create-home tandem && mkdir -p /var/lib/tandem && chown 10001:10001 /var/lib/tandem
 COPY --from=gateway --chown=10001:10001 /build/gateway /app
 COPY --from=web --chown=10001:10001 /build/web/dist /app/public
