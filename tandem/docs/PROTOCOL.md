@@ -52,7 +52,8 @@ non-GET JSON requests must also send `X-Tandem: 1`.
 | Route | Auth | Purpose |
 |---|---|---|
 | `GET /` and static files | none for `/login*`, `/assets/*`, `/brand.json`, `/favicon.svg`; session for the app shell | Web viewer |
-| `POST /api/login` `{password, totp?}` | none, rate-limited | Sets the cookie. 5 failures per IP per 15 min, then 429 with `Retry-After`. Constant-time compare. |
+| `GET /api/auth-config` | none | `{totp:boolean, productName}` so the login page knows whether to show the code field |
+| `POST /api/login` `{password, totp?}` | none, rate-limited | 200 `{ok:true}` + cookie; 401 `{error:"invalid_credentials"}` (same answer whether the password or the code was wrong); 429 `{error:"rate_limited", retryAfter}`. 5 failures per IP per 15 min, then 429 with `Retry-After`. Constant-time compare. |
 | `POST /api/logout` | session | Clears session |
 | `GET /api/me` | session | `{user:"owner", sessionId, expiresAt, totp:boolean}` |
 | `GET /api/health` | none | `{ok, cdp:boolean, mcp:boolean, version}`; never leaks URLs or titles |
@@ -70,6 +71,10 @@ The `/desktop/*` route relaxes CSP only as noVNC needs.
 ## Viewer WebSocket `/ws`
 
 Text frames are JSON objects with a `t` field. Binary frames are screencast images.
+A failed upgrade answers HTTP 401 (no/expired session) or 403 (bad Origin). An open
+socket is closed with code **4401** when its session expires or is logged out,
+**4403** on a protocol violation, and **4409** never (reserved). Clients reconnect
+with backoff on any other close and go to `/login` on 4401.
 
 ### Client → server
 
@@ -161,6 +166,38 @@ Events: `login.ok`, `login.fail`, `logout`, `control.take`, `control.release`,
 only, no path or query), `agent.tool` (tool name, held ms, outcome; **never**
 arguments, which may hold typed passwords), `agent.denied`, `desktop.open`.
 Never log cookies, tokens, passwords, TOTP codes, typed text, clipboard text or full URLs.
+
+## Desktop app bridge
+
+The desktop app (Electron, `tandem/desktop`) loads the server's web viewer in a
+window and exposes, through its preload script, exactly this object:
+
+```ts
+window.tandemDesktop?: {
+  isDesktop: true;
+  platform: "darwin" | "win32" | "linux";
+  version: string;
+  onCommand(cb: (command: string) => void): () => void; // returns unsubscribe
+  writeClipboard(text: string): void;
+  readClipboard(): string;
+  openSettings(): void;                                   // change server URL
+}
+```
+
+Commands sent from native menus and shortcuts:
+`new-tab`, `close-tab`, `focus-address`, `reload`, `stop`, `back`, `forward`,
+`next-tab`, `prev-tab`, `select-tab:1` … `select-tab:9` (9 = last tab),
+`take-control`, `release-control`, `mode-watch`, `mode-agent`, `mode-manual`,
+`open-desktop-view`, `edit-undo`, `edit-redo`, `edit-cut`, `edit-copy`,
+`edit-paste`, `edit-select-all`, `show-audit`, `logout`.
+
+The `edit-*` commands act on the focused local field (the address bar) when one
+has focus, and otherwise on the remote page: copy/cut ask the server for the
+selection (`clipboard.copy`) and write it with `writeClipboard`; paste reads
+`readClipboard()` and sends `input.text`; undo/redo/select-all send Ctrl+Z /
+Ctrl+Shift+Z / Ctrl+A key events. The page sets `document.title` to
+`<active tab title> — Tandem Browser`, which the app uses as the window title.
+The web viewer must work the same without `window.tandemDesktop` (plain browser).
 
 ## Agent (Hermes) connection
 
