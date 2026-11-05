@@ -2,14 +2,14 @@
 # Traefik" template, deployed as an hPanel Docker Manager project.
 #
 # Self-contained on purpose: Docker Manager stores only this file and the
-# project's .env, so the restore policy is inline and the gateway is built
-# straight from the repository at TANDEM_REF. The template's Traefik (host
+# project's .env, so the restore policy is inline and the gateway image is built
+# on the VPS by build-gateway.sh. The template's Traefik (host
 # network, Let's Encrypt resolver "letsencrypt") terminates HTTPS and reaches the
 # gateway on the neo container's address; no host port is published.
 #
-# .env (Docker Manager "environment"): TANDEM_HOST, TANDEM_REF, TANDEM_NEO_IMAGE,
-# and the gateway's TANDEM_* settings (see ../.env.example). Escape every "$" in
-# TANDEM_PASSWORD_HASH as "$$".
+# .env (Docker Manager "environment"): TANDEM_HOST, TANDEM_NEO_IMAGE, optional
+# TANDEM_GATEWAY_IMAGE, and the gateway's TANDEM_* settings (see ../.env.example).
+# Single-quote TANDEM_PASSWORD_HASH so its "$" signs stay literal.
 x-logging: &logging
   driver: json-file
   options: {max-size: 10m, max-file: '3'}
@@ -40,12 +40,11 @@ services:
       - traefik.http.services.tandem.loadbalancer.server.port=8790
     logging: *logging
   gateway:
-    image: tandem-gateway:${TANDEM_REF:?Set TANDEM_REF}
-    # Docker Manager pulls instead of building; this makes compose build it.
-    pull_policy: build
-    build:
-      context: https://github.com/Samin12/tandem-browser.git#${TANDEM_REF}:tandem
-      dockerfile: gateway/Dockerfile
+    # Docker Manager never builds. tandem/deploy/hostinger/build-gateway.sh builds
+    # this tag on the VPS from a sparse checkout of tandem/ (a git build context
+    # would try to clone upstream's private submodule).
+    image: ${TANDEM_GATEWAY_IMAGE:-tandem-gateway:local}
+    pull_policy: missing
     network_mode: service:neo
     depends_on:
       neo: {condition: service_healthy, restart: true}
