@@ -78,7 +78,7 @@ services:
       # Neo's Xvnc has no xf86-input-neko driver; input goes through XTest.
       NEKO_DESKTOP_INPUT_ENABLED: 'false'
       # neko sets the display to this size at start; keep it equal to NEO_SCREEN.
-      NEKO_DESKTOP_SCREEN: ${NEKO_SCREEN:-3200x2000@25}
+      NEKO_DESKTOP_SCREEN: ${NEKO_SCREEN:-3200x2000@${TANDEM_STREAM_FPS:-25}}
       NEKO_MEMBER_PROVIDER: multiuser
       NEKO_MEMBER_MULTIUSER_ADMIN_PASSWORD: ${TANDEM_NEKO_ADMIN_PASSWORD:?Set TANDEM_NEKO_ADMIN_PASSWORD}
       NEKO_MEMBER_MULTIUSER_USER_PASSWORD: ${TANDEM_NEKO_USER_PASSWORD:?Set TANDEM_NEKO_USER_PASSWORD}
@@ -87,7 +87,7 @@ services:
       NEKO_WEBRTC_TCPMUX: '59000'
       NEKO_WEBRTC_NAT1TO1: ${TANDEM_PUBLIC_IP:?Set TANDEM_PUBLIC_IP (the server's public IPv4 address)}
       NEKO_CAPTURE_VIDEO_CODEC: h264
-      NEKO_CAPTURE_VIDEO_PIPELINES: '{"main":{"fps":"25","gst_prefix":"! video/x-raw,format=I420","gst_encoder":"x264enc","gst_params":{"threads":"2","bitrate":"6000","key-int-max":"50","byte-stream":"true","tune":"zerolatency","speed-preset":"ultrafast"},"gst_suffix":"! video/x-h264,stream-format=byte-stream,profile=constrained-baseline"}}'
+      NEKO_CAPTURE_VIDEO_PIPELINES: '{"main":{"fps":"${TANDEM_STREAM_FPS:-25}","gst_prefix":"! video/x-raw,format=I420","gst_encoder":"x264enc","gst_params":{"threads":"2","bitrate":"6000","key-int-max":"50","byte-stream":"true","tune":"zerolatency","speed-preset":"ultrafast"},"gst_suffix":"! video/x-h264,stream-format=byte-stream,profile=constrained-baseline"}}'
     volumes:
       - x11:/tmp/.X11-unix
     restart: unless-stopped

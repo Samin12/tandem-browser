@@ -202,8 +202,11 @@ doing. It never does this while a person holds control.
 Neo view prefers WebRTC and falls back to VNC. The `neko` service
 (m1k1o/neko 3.2.0, pinned) runs beside the engine with `network_mode:
 service:neo` and `ipc: service:neo`, captures display `:1` through a shared
-`/tmp/.X11-unix` volume, encodes H.264 (x264 ultrafast, 25 fps), injects input
-with XTest, and listens on 127.0.0.1:8080 inside the shared namespace. Media
+`/tmp/.X11-unix` volume, encodes H.264 (x264 ultrafast, `TANDEM_STREAM_FPS`,
+default 25), injects input with XTest, and listens on 127.0.0.1:8080 inside the
+shared namespace. It captures and encodes only while a viewer is connected; at
+Retina size that costs about one CPU core, roughly in proportion to the frame
+rate, so a small server can lower `TANDEM_STREAM_FPS` (15–20). Media
 uses one UDP mux port (TCP mux on the same number as a fallback), published on
 the neo service (`TANDEM_WEBRTC_PORT`, default 59000). neko applies input only
 from its *host*; its controls are locked so only the gateway can choose the host.
