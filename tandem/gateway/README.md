@@ -104,3 +104,35 @@ The gateway explicitly terminates its sockets at shutdown. Bun 1.3 can leave the
 promise from `server.stop(true)` pending after a completed WebSocket handshake;
 shutdown calls stop without waiting on that accounting promise, then closes its
 stores. No GUI or independent browser session is started by the gateway.
+
+## neko WebRTC
+
+Set `TANDEM_NEKO_URL` to neko's internal HTTP origin to enable WebRTC, together
+with `TANDEM_NEKO_USER_PASSWORD` and `TANDEM_NEKO_API_TOKEN`. Both credentials are
+required when the URL is set. With no URL the gateway stays VNC-only. `/api/me`
+reports `webrtc` from a fresh health probe; `/api/health` includes `neko` without
+changing the CDP/MCP-derived `ok` value.
+
+The viewer needs its Tandem cookie for `/neko/*`. WebSocket upgrades require an
+allowed Origin; HTTP GETs may omit Origin, like other viewer GETs, and reject an
+explicitly foreign Origin. Only
+`GET /neko/api/whoami` and the `GET /neko/api/ws` WebSocket upgrade are exposed:
+these are the pinned core client's authentication/reconnect and signalling
+routes. Each viewer's neko token stays in memory and is injected as a Bearer
+header, including on the upstream WebSocket. Client query parameters, cookies,
+authorization and upstream credential headers are never forwarded. As with other
+viewer routes, a client Authorization header is rejected, even alongside a cookie.
+All neko management routes and HTTP writes return 404 for authenticated viewers.
+
+Room settings and host mapping are applied through the admin API. A failed neko
+operation leaves Tandem's coordinator, VNC, Follow and MCP available. Reconnects
+restore room locks and host mapping; deleted/expired viewer sessions are removed
+from neko, with failed deletions retried on recovery. The `screen` viewer command
+accepts even integer device-pixel sizes from 320×240 through 3840×2400 and applies
+the last request after 500 ms through `POST /api/room/screen` at 25 Hz.
+
+`TANDEM_TEST_NEKO=1 bun run e2e` adds live neko health, signalling, host mapping and
+real display resize checks. It must run inside the engine network namespace.
+`TANDEM_TEST_NEKO_URL` and `TANDEM_TEST_NEKO_API_TOKEN` override the CI-only defaults;
+the defaults use the throwaway credentials in `compose.ci.yaml`. See
+`NEKO-VALIDATION.md` for the exact validation commands and limitations.

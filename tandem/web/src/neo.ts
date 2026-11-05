@@ -1,3 +1,6 @@
+import { NekoView } from './neo-neko';
+import { ClickReplay, selectTransport } from './neo-transport';
+import type { NeoTransport } from './neo-transport';
 import { enableViewerResize } from './neo-resize';
 import { commandShortcut, macKeyRoute, macKeySequence, shortcutSequence, viewOnly } from './neo-input';
 import type { KeyStroke } from './neo-input';
@@ -14,6 +17,9 @@ type RFBConstructor = new (container: HTMLElement, url: string, options: { share
 export type NeoStatus = 'connecting' | 'live' | 'reconnecting';
 export class NeoView {
   private rfb?: RFB;
+  private neko?: NekoView;
+  private fellBack = false;
+  transport: NeoTransport = 'VNC';
   private stopped = true;
   private attempt = 0;
   private generation = 0;
@@ -24,17 +30,20 @@ export class NeoView {
   private viewerConnected = false;
   private ready = false;
   private suppressed = new Set<string>();
-  private pendingClick?: { x: number; y: number; button: number; at: number };
+  private pendingClick = new ClickReplay();
   constructor(private container: HTMLElement, private mac: boolean, private background: string,
     private status: (status: NeoStatus) => void, private notify: (text: string, takeControl?: boolean) => void,
-    private takeControl: () => void) {
+    private takeControl: () => void, private sendScreen: (message: { t: 'screen'; w: number; h: number }) => void) {
     // Clicking the page grabs the wheel: take control, then replay that click once input is allowed.
     container.addEventListener('pointerdown', event => {
       if (this.canInput() || !this.ready) return;
       event.preventDefault(); event.stopImmediatePropagation();
       if (event.button !== 0 && event.button !== 2) return;
-      this.pendingClick = { x: event.clientX, y: event.clientY, button: event.button, at: Date.now() };
+      this.pendingClick.queue({ x: event.clientX, y: event.clientY, button: event.button, at: Date.now() });
       this.takeControl();
+    }, true);
+    container.addEventListener('mousedown', event => {
+      if (this.neko && !this.canInput()) { event.preventDefault(); event.stopImmediatePropagation(); }
     }, true);
     container.addEventListener('keydown', event => this.keydown(event), true);
     container.addEventListener('keyup', event => {
@@ -51,17 +60,21 @@ export class NeoView {
   start() { if (!this.stopped) return; this.stopped = false; this.attempt = 0; void this.connect(); }
   stop() {
     this.stopped = true; this.generation++; this.ready = false; clearTimeout(this.retry); clearTimeout(this.pasteTimer);
-    this.pasteVersion++; this.rfb?.disconnect(); this.rfb = undefined; this.container.replaceChildren();
+    this.pasteVersion++; this.pendingClick.clear(); this.neko?.stop(); this.neko = undefined; this.rfb?.disconnect(); this.rfb = undefined; this.container.replaceChildren();
   }
   setControl(control: Control, connected: boolean) {
+    const wasConnected = this.viewerConnected;
     this.control = control; this.viewerConnected = connected;
+    this.neko?.setControl(!viewOnly(control, connected));
+    if (connected && !wasConnected) this.neko?.resize();
     const readonly = viewOnly(control, connected);
     if (this.rfb && this.rfb.viewOnly !== readonly) this.rfb.viewOnly = readonly;
-    const click = this.pendingClick;
+    this.replayClick();
+  }
+  private replayClick() {
+    const click = this.pendingClick.take(this.canInput(), Date.now());
     if (!click) return;
-    if (Date.now() - click.at > 5000) { this.pendingClick = undefined; return; }
-    if (!this.canInput()) return;
-    this.pendingClick = undefined;
+    if (this.neko) { this.neko.replay(click); return; }
     const canvas = this.container.querySelector('canvas');
     if (!canvas) return;
     this.rfb!.focus();
@@ -70,9 +83,13 @@ export class NeoView {
     canvas.dispatchEvent(new MouseEvent('mousedown', init));
     canvas.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
   }
-  focus() { this.rfb?.focus(); }
-  private canInput() { return this.ready && !this.stopped && !viewOnly(this.control, this.viewerConnected); }
-  private send(sequence: KeyStroke[]) { if (this.canInput()) for (const stroke of sequence) this.rfb!.sendKey(...stroke); }
+  focus() { if (this.neko) this.neko.focus(); else this.rfb?.focus(); }
+  private canInput() { return this.ready && !this.stopped && !viewOnly(this.control, this.viewerConnected) && (!this.neko || this.neko.canInput()); }
+  private send(sequence: KeyStroke[]) {
+    if (!this.canInput()) return;
+    if (this.neko) this.neko.send(sequence);
+    else for (const stroke of sequence) this.rfb!.sendKey(...stroke);
+  }
   async command(command: string): Promise<boolean> {
     const shortcut = commandShortcut(command);
     if (!shortcut) return false;
@@ -109,14 +126,15 @@ export class NeoView {
     }
   }
   private async paste(text?: string) {
-    const rfb = this.rfb;
+    const rfb = this.rfb, neko = this.neko;
     text ??= window.tandemDesktop ? window.tandemDesktop.readClipboard() : await navigator.clipboard.readText();
-    if (!this.canInput() || this.rfb !== rfb) return;
-    rfb!.clipboardPasteFrom(text.slice(0, 100000));
+    if (!this.canInput() || this.rfb !== rfb || this.neko !== neko) return;
+    if (neko) await neko.paste(text.slice(0, 100000));
+    else rfb!.clipboardPasteFrom(text.slice(0, 100000));
     // Xvnc/vncconfig acquire the X selection asynchronously after the clipboard
     // notification. Give that ownership change a turn before Chromium pastes.
     await new Promise(resolve => setTimeout(resolve, 100));
-    if (!this.canInput() || this.rfb !== rfb) return;
+    if (!this.canInput() || this.rfb !== rfb || this.neko !== neko) return;
     this.send(shortcutSequence({ key: 'v', code: 'KeyV', ctrl: true }));
   }
   private async connect() {
@@ -127,8 +145,24 @@ export class NeoView {
       if (this.stopped || generation !== this.generation) return;
       if (auth.status === 401) { location.assign('/login'); return; }
       if (!auth.ok) throw new Error('Connection unavailable');
-      const me = await auth.json().catch(() => ({})) as { displayScale?: unknown };
+      const me = await auth.json().catch(() => ({})) as { displayScale?: unknown; webrtc?: unknown };
       const scale = typeof me.displayScale === 'number' && me.displayScale >= 1 && me.displayScale <= 3 ? me.displayScale : 1;
+      this.transport = selectTransport(me.webrtc, this.fellBack);
+      if (this.transport === 'WebRTC') {
+        let wasLive = false;
+        this.container.replaceChildren();
+        this.neko = new NekoView(this.container, scale, this.sendScreen, live => {
+          if (this.stopped || generation !== this.generation) return;
+          this.ready = live; this.status(live ? 'live' : wasLive ? 'reconnecting' : 'connecting');
+          wasLive ||= live;
+        }, () => this.replayClick(), text => this.writeClipboard(text), () => {
+          if (this.stopped || generation !== this.generation) return;
+          this.fellBack = true; this.neko?.stop(); this.neko = undefined; this.ready = false;
+          this.pasteVersion++; void this.connect();
+        });
+        this.neko.setControl(!viewOnly(this.control, this.viewerConnected));
+        return;
+      }
       // A runtime specifier keeps the engine's noVNC ES modules out of our bundle.
       const path = '/desktop/core/' + 'rfb.js';
       const { default: RFB } = await import(/* @vite-ignore */ path) as { default: RFBConstructor };
@@ -154,17 +188,21 @@ export class NeoView {
       rfb.addEventListener('securityfailure', () => { if (!this.stopped && this.rfb === rfb) location.assign('/login'); });
       rfb.addEventListener('clipboard', event => {
         if (this.stopped || this.rfb !== rfb) return;
-        const text = String((event as CustomEvent<{ text: string }>).detail.text).slice(0, 100000);
-        if (window.tandemDesktop) window.tandemDesktop.writeClipboard(text);
-        else void navigator.clipboard.writeText(text).catch(() => this.notify('Allow clipboard access to copy from the browser.'));
+        this.writeClipboard(String((event as CustomEvent<{ text: string }>).detail.text));
       });
     } catch (error) {
       if (!this.stopped && generation === this.generation) {
         console.warn('Neo connection failed.', error);
+        if (this.transport === 'WebRTC') { this.fellBack = true; this.neko?.stop(); this.neko = undefined; }
         const rfb = this.rfb; this.rfb = undefined; rfb?.disconnect(); this.ready = false;
         this.reconnect();
       }
     }
+  }
+  private writeClipboard(value: string) {
+    const text = value.slice(0, 100000);
+    if (window.tandemDesktop) window.tandemDesktop.writeClipboard(text);
+    else void navigator.clipboard?.writeText(text).catch(() => this.notify('Allow clipboard access to copy from the browser.'));
   }
   private reconnect() {
     if (this.stopped) return;

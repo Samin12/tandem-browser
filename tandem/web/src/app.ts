@@ -193,7 +193,8 @@ function renderConnection() {
   const retrying = reconnecting || view === 'neo' && neoStatus === 'reconnecting';
   $('neo-loading').hidden = view !== 'neo' || neoStatus === 'live';
   $('neo-loading-text').textContent = retrying ? 'Reconnecting…' : 'Connecting to your browser…';
-  $('connection').textContent = live ? latency === undefined ? 'Live' : `Live · ${latency} ms` : retrying ? 'Reconnecting…' : 'Connecting…';
+  const liveLabel = view === 'neo' ? `Live · ${neo?.transport ?? 'VNC'}` : 'Live';
+  $('connection').textContent = live ? latency === undefined ? liveLabel : `${liveLabel} · ${latency} ms` : retrying ? 'Reconnecting…' : 'Connecting…';
   $('connection').classList.toggle('live', live);
 }
 function setMode(next: 'watch' | 'agent' | 'manual') {
@@ -467,7 +468,7 @@ function resized() { draw(); clearTimeout(viewportTimer); viewportTimer = setTim
 new ResizeObserver(resized).observe(canvas); window.addEventListener('resize', resized);
 window.addEventListener('pagehide', () => { stopped = true; send({ t: 'follow', enabled: false }); neo?.stop(); releaseInputs(); unsubscribe?.(); clearInterval(pingTimer); clearTimeout(reconnectTimer); socket?.close(); frame?.image.close(); });
 async function start() { try { brand = await loadBrand();
-  neo = new NeoView($('neo-window'), mac, brand.colors.background || '#FAF9F5', status => { neoStatus = status; renderConnection(); }, notify, () => setMode('manual'));
+  neo = new NeoView($('neo-window'), mac, brand.colors.background || '#FAF9F5', status => { neoStatus = status; renderConnection(); }, notify, () => setMode('manual'), send);
   applyView(); render(); draw(); await connect(); } catch (error) { notify(error instanceof Error ? error.message : 'Unable to start browser.'); } }
 applyView();
 void start();

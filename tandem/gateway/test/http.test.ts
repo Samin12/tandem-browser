@@ -23,7 +23,7 @@ beforeAll(async () => {
 afterAll(async () => { await gateway.close(); rmSync(dir, { recursive: true, force: true }); });
 const post = (path: string, body: unknown, headers: Record<string, string> = {}) => fetch(base + path, { method: 'POST', headers: { origin, 'x-tandem': '1', 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
 test('health and auth config are public, no internal details', async () => {
-  expect(await (await fetch(base + '/api/health')).json()).toEqual({ ok: false, cdp: false, mcp: false, version: '0.1.0' });
+  expect(await (await fetch(base + '/api/health')).json()).toEqual({ ok: false, cdp: false, mcp: false, neko: false, version: '0.1.0' });
   expect(await (await fetch(base + '/api/auth-config')).json()).toEqual({ totp: true, productName: 'Tandem Browser' });
 });
 test('unauthenticated me/ws rejected; app shell redirects and login is public', async () => {

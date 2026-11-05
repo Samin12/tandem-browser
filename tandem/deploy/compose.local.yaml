@@ -31,6 +31,8 @@ services:
     depends_on:
       neo-prefs: {condition: service_completed_successfully}
     hostname: neo
+    # neko (below) captures this display: it needs the X socket and shared memory.
+    ipc: shareable
     shm_size: 1g
     stop_grace_period: 45s
     restart: unless-stopped
@@ -45,9 +47,51 @@ services:
       # tells viewers the same scale (TANDEM_DISPLAY_SCALE) so they size the screen to match.
       NEO_ARGS: ${NEO_ARGS:---disable-browseros-features=AvatarButton --force-device-scale-factor=${TANDEM_DISPLAY_SCALE:-2}}
     volumes:
+      - x11:/tmp/.X11-unix
       - ${TANDEM_DATA:-${HOME}/.local/share/tandem}/neo:/data
       - ./policies/tandem-restore.json:/etc/chromium/policies/managed/tandem-restore.json:ro
-    ports: ['127.0.0.1:${TANDEM_PORT:-8790}:8790']
+    ports:
+      - '127.0.0.1:${TANDEM_PORT:-8790}:8790'
+      # WebRTC media for neko (UDP, with TCP as a fallback).
+      - '127.0.0.1:${TANDEM_WEBRTC_PORT:-59000}:59000/udp'
+      - '127.0.0.1:${TANDEM_WEBRTC_PORT:-59000}:59000/tcp'
+    logging: *logging
+  # WebRTC streaming of the engine's display (m1k1o/neko, Apache-2.0). Only the
+  # gateway talks to it (127.0.0.1:8080 in the shared namespace); media uses the
+  # mux port published on neo. Input arrives over XTest, and neko applies it only
+  # for its host, whom the gateway sets from Tandem's control.
+  neko:
+    image: ${TANDEM_NEKO_IMAGE:-ghcr.io/m1k1o/neko/base:3.2.0@sha256:587a3389b6b99c8999eb00a768c79205a74647c57cf5b9695a90234a0edaa446}
+    network_mode: service:neo
+    ipc: service:neo
+    user: '1000'
+    depends_on:
+      neo: {condition: service_healthy}
+    entrypoint: ['/usr/bin/neko', 'serve']
+    environment:
+      DISPLAY: ':1'
+      NEKO_SERVER_BIND: 127.0.0.1:8080
+      NEKO_SERVER_PROXY: 'true'
+      NEKO_SERVER_METRICS: 'false'
+      NEKO_LEGACY: 'false'
+      NEKO_CHAT_ENABLED: 'false'
+      NEKO_FILETRANSFER_ENABLED: 'false'
+      # Neo's Xvnc has no xf86-input-neko driver; input goes through XTest.
+      NEKO_DESKTOP_INPUT_ENABLED: 'false'
+      # neko sets the display to this size at start; keep it equal to NEO_SCREEN.
+      NEKO_DESKTOP_SCREEN: ${NEKO_SCREEN:-3200x2000@${TANDEM_STREAM_FPS:-25}}
+      NEKO_MEMBER_PROVIDER: multiuser
+      NEKO_MEMBER_MULTIUSER_ADMIN_PASSWORD: tandem-local-neko-admin-password
+      NEKO_MEMBER_MULTIUSER_USER_PASSWORD: tandem-local-neko-user-password
+      NEKO_SESSION_API_TOKEN: tandem-local-neko-api-token-000000000000
+      NEKO_WEBRTC_UDPMUX: '59000'
+      NEKO_WEBRTC_TCPMUX: '59000'
+      NEKO_WEBRTC_NAT1TO1: ${TANDEM_PUBLIC_IP:-127.0.0.1}
+      NEKO_CAPTURE_VIDEO_CODEC: h264
+      NEKO_CAPTURE_VIDEO_PIPELINES: '{"main":{"fps":"${TANDEM_STREAM_FPS:-25}","gst_prefix":"! video/x-raw,format=I420","gst_encoder":"x264enc","gst_params":{"threads":"2","bitrate":"6000","key-int-max":"50","byte-stream":"true","tune":"zerolatency","speed-preset":"ultrafast"},"gst_suffix":"! video/x-h264,stream-format=byte-stream,profile=constrained-baseline"}}'
+    volumes:
+      - x11:/tmp/.X11-unix
+    restart: unless-stopped
     logging: *logging
   gateway:
     build: {context: '..', dockerfile: gateway/Dockerfile}
@@ -55,6 +99,9 @@ services:
     depends_on:
       neo: {condition: service_healthy, restart: true}
     environment:
+      TANDEM_NEKO_URL: http://127.0.0.1:8080
+      TANDEM_NEKO_USER_PASSWORD: tandem-local-neko-user-password
+      TANDEM_NEKO_API_TOKEN: tandem-local-neko-api-token-000000000000
       TANDEM_DISPLAY_SCALE: ${TANDEM_DISPLAY_SCALE:-2}
       TANDEM_PUBLIC_ORIGIN: http://127.0.0.1:8790
       TANDEM_PASSWORD: tandem-local-test-password
@@ -74,3 +121,5 @@ services:
       start_period: 120s
       retries: 6
     logging: *logging
+volumes:
+  x11:

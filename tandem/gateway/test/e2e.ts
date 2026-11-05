@@ -10,7 +10,7 @@ if (!base || !origin || !password || !agent) {
   console.error('Required: TANDEM_URL, TANDEM_ORIGIN, TANDEM_TEST_PASSWORD, TANDEM_AGENT_TOKEN'); process.exit(1);
 }
 let passed = 0, failed = 0, cookie = '', sessionId = '', mcpSession = '', protocol = '2024-11-05';
-let ws: WebSocket | undefined;
+let ws: WebSocket | undefined, nekoWs: WebSocket | undefined;
 const messages: any[] = [], frames: Buffer[] = [], createdTabs = new Set<string>();
 function assert(condition: unknown, message: string): asserts condition { if (!condition) throw new Error(message); }
 const check = async (name: string, run: () => Promise<void>) => {
@@ -83,6 +83,62 @@ try {
     await until(() => messages.slice(mark).find(m => m.t === 'error' && m.code === 'not_in_control'), 'input rejection');
   });
   await check('control.take gives human ownership', async () => { await controlled('human'); });
+  if (process.env.TANDEM_TEST_NEKO === '1') {
+    const nekoBase = process.env.TANDEM_TEST_NEKO_URL ?? 'http://127.0.0.1:8080';
+    const nekoApiToken = process.env.TANDEM_TEST_NEKO_API_TOKEN ?? 'tandem-local-neko-api-token-000000000000';
+    const nekoAdmin = async (path: string) => {
+      const response = await fetch(nekoBase + '/api' + path, { headers: { authorization: `Bearer ${nekoApiToken}` }, signal: AbortSignal.timeout(5000) });
+      assert(response.ok, `neko admin status ${response.status}`); return await response.json() as any;
+    };
+    await check('WebRTC availability and blocked neko routes', async () => {
+      assert((await (await viewerFetch('/api/me')).json() as any).webrtc === true, 'WebRTC not healthy');
+      assert((await viewerFetch('/neko/metrics')).status === 404, 'neko metrics exposed');
+      assert((await viewerFetch('/neko/api/room/control')).status === 404, 'neko control exposed');
+      assert((await fetch(base + '/neko/api/ws', { headers: { origin: origin!, upgrade: 'websocket' } })).status === 401, 'anonymous neko upgrade accepted');
+    });
+    let nekoId = '';
+    await check('authenticated neko WebSocket upgrades and receives system/init without credentials', async () => {
+      const response = await fetch(base + '/neko/api/whoami', { headers: { cookie } });
+      assert(response.ok, 'same-origin neko reconnect check requires no Origin');
+      const me = await response.json() as any; nekoId = me.id;
+      assert(typeof nekoId === 'string' && !('token' in me), 'invalid neko viewer identity');
+      const received: any[] = [];
+      nekoWs = new WebSocket(base!.replace(/^http/, 'ws') + '/neko/api/ws', { headers: { cookie, origin: origin! } } as any);
+      nekoWs.onmessage = event => { if (typeof event.data === 'string') received.push(JSON.parse(event.data)); };
+      await new Promise<void>((resolve, reject) => { nekoWs!.onopen = () => resolve(); nekoWs!.onerror = () => reject(new Error('neko upgrade failed')); });
+      await until(() => received.find(m => m.event === 'system/init'), 'neko system/init');
+      assert(!JSON.stringify(received).includes(nekoApiToken), 'admin credential leaked');
+    });
+    await check('Tandem control maps to neko host and release resets host', async () => {
+      const hostIs = async (id?: string) => {
+        for (let i = 0; i < 100; i++) { const state = await nekoAdmin('/room/control'); if (id ? state.host_id === id : !state.has_host) return; await Bun.sleep(50); }
+        throw new Error('neko host did not match Tandem');
+      };
+      await hostIs(nekoId); await controlled('agent'); await hostIs();
+      await controlled('human'); await hostIs(nekoId);
+      const settings = await nekoAdmin('/room/settings');
+      assert(settings.locked_controls === true && settings.implicit_hosting === false && settings.control_protection === false, 'unsafe neko room settings');
+    });
+    await check('viewer screen message resizes the real display (CDP device pixels)', async () => {
+      const probe = new Cdp(process.env.TANDEM_TEST_CDP_URL ?? 'http://127.0.0.1:9110', () => false);
+      probe.start();
+      try {
+        await until(() => probe.connected && probe.tabs.size > 0, 'CDP screen probe');
+        const target = [...probe.tabs.keys()][0]!;
+        const size = async () => (await probe.page(target, 'Runtime.evaluate', { expression: '({w:Math.round(screen.width*devicePixelRatio),h:Math.round(screen.height*devicePixelRatio)})', returnByValue: true })).result.value;
+        const before = await size(), w = before.w === 1280 ? 1440 : 1280, h = 800;
+        send({ t: 'screen', w, h });
+        let resized = false;
+        try {
+          for (let i = 0; i < 100; i++) { const current = await size(); if (current.w === w && current.h === h) { resized = true; break; } await Bun.sleep(100); }
+          assert(resized, 'real display size did not change');
+        } finally {
+          send({ t: 'screen', w: before.w, h: before.h });
+          for (let i = 0; i < 100; i++) { const current = await size(); if (current.w === before.w && current.h === before.h) break; await Bun.sleep(100); }
+        }
+      } finally { probe.close(); }
+    });
+  }
   let targetId = '';
   await check('tab.new appears with human provenance', async () => {
     const mark = messages.length; send({ t: 'tab.new', url: 'https://example.com' });
@@ -219,7 +275,7 @@ try {
     const response = await viewerFetch('/api/logout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); assert(response.ok, 'logout failed'); assert(await close === 4401, 'logout close code');
   });
 } catch {} finally {
-  ws?.close();
+  ws?.close(); nekoWs?.close();
   if (mcpSession) try { await fetch(base + '/mcp', { method: 'DELETE', headers: { authorization: `Bearer ${agent}`, 'mcp-session-id': mcpSession, 'mcp-protocol-version': protocol }, signal: AbortSignal.timeout(5000) }); } catch {}
 }
 console.log(`${passed} pass, ${failed} fail`);

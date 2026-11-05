@@ -1,0 +1,160 @@
+bun test v1.3.14 (0d9b296a)
+
+test/neo-input.test.ts:
+(pass) Mac command maps to balanced Linux Control and lowercase Latin-1 keysyms [0.35ms]
+(pass) Mac command preserves Shift and Alt with reverse modifier release [0.03ms]
+(pass) Mac Option dead keys retain their physical shortcut letter [0.02ms]
+(pass) paste uses the clipboard route; OS shortcuts and Meta stay local [0.05ms]
+(pass) all native browser and edit commands map to engine shortcuts [0.33ms]
+(pass) viewOnly follows acknowledged ownership and fails closed on disconnect or takeover [0.08ms]
+
+test/neo-transport.test.ts:
+(pass) WebRTC is opt-in and fallback stays VNC for this page load [0.06ms]
+(pass) socket/ICE alone do not satisfy the eight-second decoded-frame deadline [0.06ms]
+(pass) a decoded frame cancels the initial deadline; ICE gets ten continuous seconds to recover [0.02ms]
+(pass) screen messages use engine scale, even dimensions and both maximum dimensions [0.11ms]
+(pass) all desktop browser/edit commands go through neko key API in balanced order [0.48ms]
+(pass) takeover click waits for Tandem and neko readiness, replays once in remote pixels [0.10ms]
+(pass) expired, cancelled and letterbox clicks do not reach the remote [0.03ms]
+
+test/commands.test.ts:
+(pass) edit-undo targets address field only while it has focus [0.03ms]
+(pass) edit-redo targets address field only while it has focus
+(pass) edit-cut targets address field only while it has focus
+(pass) edit-copy targets address field only while it has focus
+(pass) edit-paste targets address field only while it has focus
+(pass) edit-select-all targets address field only while it has focus
+(pass) all native browser commands bypass edit routing [0.04ms]
+(pass) tab shortcuts wrap; 9 means last, missing indices clamp [0.05ms]
+
+test/frame.test.ts:
+(pass) binary frames > big endian UTF-8 header length and JPEG payload [0.30ms]
+(pass) binary frames > rejects truncated, oversized, invalid JSON and invalid dimensions [0.12ms]
+(pass) viewport mapping > vertical letterboxing and CSS coordinates independent of DPR [0.06ms]
+(pass) viewport mapping > horizontal letterboxing; outside/up events clamp during capture [0.02ms]
+(pass) viewport mapping > URL display preserves schemes, paths, queries and punycode [0.02ms]
+
+test/input.test.ts:
+(pass) keyboard translation > Mac Command becomes Linux Control, including its physical key [0.11ms]
+(pass) keyboard translation > non-Mac Meta stays Meta; all CDP modifier bits combine [0.03ms]
+(pass) keyboard translation > only unmodified printable keydown carries text; Shift preserves case [0.04ms]
+(pass) keyboard translation > repeat and keypad location survive translation [0.01ms]
+(pass) keyboard translation > Backspace / Backspace → 8
+(pass) keyboard translation > Tab / Tab → 9
+(pass) keyboard translation > Enter / Enter → 13
+(pass) keyboard translation > Shift / ShiftLeft → 16
+(pass) keyboard translation > Control / ControlRight → 17
+(pass) keyboard translation > Alt / AltLeft → 18
+(pass) keyboard translation > Pause / Pause → 19
+(pass) keyboard translation > CapsLock / CapsLock → 20
+(pass) keyboard translation > Escape / Escape → 27
+(pass) keyboard translation >   / Space → 32
+(pass) keyboard translation > PageUp / PageUp → 33
+(pass) keyboard translation > PageDown / PageDown → 34
+(pass) keyboard translation > End / End → 35
+(pass) keyboard translation > Home / Home → 36
+(pass) keyboard translation > ArrowLeft / ArrowLeft → 37
+(pass) keyboard translation > ArrowUp / ArrowUp → 38
+(pass) keyboard translation > ArrowRight / ArrowRight → 39
+(pass) keyboard translation > ArrowDown / ArrowDown → 40
+(pass) keyboard translation > Insert / Insert → 45
+(pass) keyboard translation > Delete / Delete → 46
+(pass) keyboard translation > Meta / MetaLeft → 91 [0.01ms]
+(pass) keyboard translation > ContextMenu / ContextMenu → 93
+(pass) keyboard translation > * / NumpadMultiply → 106
+(pass) keyboard translation > + / NumpadAdd → 107
+(pass) keyboard translation > , / NumpadComma → 108
+(pass) keyboard translation > - / NumpadSubtract → 109
+(pass) keyboard translation > . / NumpadDecimal → 110
+(pass) keyboard translation > / / NumpadDivide → 111
+(pass) keyboard translation > Enter / NumpadEnter → 13
+(pass) keyboard translation > ; / Semicolon → 186
+(pass) keyboard translation > = / Equal → 187
+(pass) keyboard translation > , / Comma → 188
+(pass) keyboard translation > - / Minus → 189
+(pass) keyboard translation > . / Period → 190
+(pass) keyboard translation > / / Slash → 191
+(pass) keyboard translation > ` / Backquote → 192
+(pass) keyboard translation > [ / BracketLeft → 219
+(pass) keyboard translation > \ / Backslash → 220
+(pass) keyboard translation > ] / BracketRight → 221
+(pass) keyboard translation > ' / Quote → 222
+(pass) keyboard translation > ? / Slash → 191
+(pass) keyboard translation > : /  → 186
+(pass) keyboard translation > Unidentified /  → 0
+(pass) keyboard translation > 0 / Digit0 → 48
+(pass) keyboard translation > 0 / Numpad0 → 96
+(pass) keyboard translation > 1 / Digit1 → 49
+(pass) keyboard translation > 1 / Numpad1 → 97
+(pass) keyboard translation > 2 / Digit2 → 50
+(pass) keyboard translation > 2 / Numpad2 → 98
+(pass) keyboard translation > 3 / Digit3 → 51
+(pass) keyboard translation > 3 / Numpad3 → 99
+(pass) keyboard translation > 4 / Digit4 → 52
+(pass) keyboard translation > 4 / Numpad4 → 100
+(pass) keyboard translation > 5 / Digit5 → 53
+(pass) keyboard translation > 5 / Numpad5 → 101
+(pass) keyboard translation > 6 / Digit6 → 54
+(pass) keyboard translation > 6 / Numpad6 → 102
+(pass) keyboard translation > 7 / Digit7 → 55
+(pass) keyboard translation > 7 / Numpad7 → 103
+(pass) keyboard translation > 8 / Digit8 → 56
+(pass) keyboard translation > 8 / Numpad8 → 104
+(pass) keyboard translation > 9 / Digit9 → 57
+(pass) keyboard translation > 9 / Numpad9 → 105
+(pass) keyboard translation > a / KeyA → 65
+(pass) keyboard translation > b / KeyB → 66
+(pass) keyboard translation > c / KeyC → 67
+(pass) keyboard translation > d / KeyD → 68
+(pass) keyboard translation > e / KeyE → 69
+(pass) keyboard translation > f / KeyF → 70
+(pass) keyboard translation > g / KeyG → 71
+(pass) keyboard translation > h / KeyH → 72
+(pass) keyboard translation > i / KeyI → 73
+(pass) keyboard translation > j / KeyJ → 74
+(pass) keyboard translation > k / KeyK → 75
+(pass) keyboard translation > l / KeyL → 76
+(pass) keyboard translation > m / KeyM → 77
+(pass) keyboard translation > n / KeyN → 78
+(pass) keyboard translation > o / KeyO → 79
+(pass) keyboard translation > p / KeyP → 80
+(pass) keyboard translation > q / KeyQ → 81
+(pass) keyboard translation > r / KeyR → 82
+(pass) keyboard translation > s / KeyS → 83
+(pass) keyboard translation > t / KeyT → 84
+(pass) keyboard translation > u / KeyU → 85
+(pass) keyboard translation > v / KeyV → 86
+(pass) keyboard translation > w / KeyW → 87
+(pass) keyboard translation > x / KeyX → 88
+(pass) keyboard translation > y / KeyY → 89
+(pass) keyboard translation > z / KeyZ → 90
+(pass) keyboard translation > F1 / F1 → 112
+(pass) keyboard translation > F2 / F2 → 113
+(pass) keyboard translation > F3 / F3 → 114
+(pass) keyboard translation > F4 / F4 → 115
+(pass) keyboard translation > F5 / F5 → 116
+(pass) keyboard translation > F6 / F6 → 117
+(pass) keyboard translation > F7 / F7 → 118
+(pass) keyboard translation > F8 / F8 → 119
+(pass) keyboard translation > F9 / F9 → 120
+(pass) keyboard translation > F10 / F10 → 121
+(pass) keyboard translation > F11 / F11 → 122
+(pass) keyboard translation > F12 / F12 → 123
+(pass) pointer semantics > correct browser button names and wheel delta modes [0.04ms]
+(pass) pointer semantics > click counts require ≤500 ms, ≤4 px and matching button [0.05ms]
+
+test/neo-resize.test.ts:
+(pass) noVNC 1.3 can resize a watched window without enabling input on the RFB instance [0.14ms]
+(pass) the remote screen is the viewer size times the engine scale, in even pixels [0.02ms]
+(pass) very large windows are capped without changing their shape [0.01ms]
+
+test/view.test.ts:
+(pass) Neo is default and invalid preferences cannot select another view [0.07ms]
+(pass) URL selection wins and persists across later visits [0.03ms]
+(pass) menu selection persists and invalid URL falls back to saved choice [0.01ms]
+(pass) disabled localStorage remains optional for reads and writes [0.05ms]
+
+ 140 pass
+ 0 fail
+ 383 expect() calls
+Ran 140 tests across 7 files. [18.00ms]

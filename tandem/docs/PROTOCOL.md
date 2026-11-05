@@ -197,6 +197,64 @@ doing. It never does this while a person holds control.
   Ctrl+N, edit-* Ctrl+Z / Ctrl+Shift+Z / Ctrl+X / Ctrl+C / paste / Ctrl+A.
   Without control they show "Take control first".
 
+## WebRTC transport (neko)
+
+Neo view prefers WebRTC and falls back to VNC. The `neko` service
+(m1k1o/neko 3.2.0, pinned) runs beside the engine with `network_mode:
+service:neo` and `ipc: service:neo`, captures display `:1` through a shared
+`/tmp/.X11-unix` volume, encodes H.264 (x264 ultrafast, `TANDEM_STREAM_FPS`,
+default 25), injects input with XTest, and listens on 127.0.0.1:8080 inside the
+shared namespace. It captures and encodes only while a viewer is connected; at
+Retina size that costs about one CPU core, roughly in proportion to the frame
+rate, so a small server can lower `TANDEM_STREAM_FPS` (15–20). Media
+uses one UDP mux port (TCP mux on the same number as a fallback), published on
+the neo service (`TANDEM_WEBRTC_PORT`, default 59000). neko applies input only
+from its *host*; its controls are locked so only the gateway can choose the host.
+
+Gateway environment: `TANDEM_NEKO_URL` (unset = WebRTC off, VNC only),
+`TANDEM_NEKO_USER_PASSWORD` (neko `multiuser` user password, only the gateway
+knows it), `TANDEM_NEKO_API_TOKEN` (neko `session.api_token`, full admin, never
+leaves the gateway).
+
+### Sessions and routes
+
+- `GET /api/me` adds `webrtc: boolean`.
+- The gateway logs each Tandem viewer session into neko on first use
+  (`POST {neko}/api/login` as `tandem-<short id>` with the user password),
+  keeps neko's token server-side, and deletes that neko session on logout or
+  expiry. The browser never sees a neko credential.
+- `/neko/*` proxies to neko for viewer sessions only (cookie + Origin), with
+  `Authorization: Bearer <that session's neko token>` injected and any client
+  `Authorization`/`Cookie` for neko stripped. An explicit allowlist covers
+  only what `@m1k1o/neko`'s client needs (its signalling WebSocket
+  `/neko/api/ws` and the few read routes it calls); everything else under
+  `/neko/` is 404 — in particular `/api/login`, `/api/members*`,
+  `/api/sessions*`, `/api/room/settings`, `/api/room/control/*`,
+  `/api/room/screen` writes, `/api/batch`, `/metrics`, `/debug/*`.
+
+### Control and screen size
+
+- At start the gateway sets room settings `locked_controls: true`,
+  `implicit_hosting: false`, `control_protection: false` with the API token.
+- Human holds control → `POST /api/room/control/give/{nekoSessionId}` for that
+  viewer's neko session (logging it in first if needed). Agent → `POST
+  /api/room/control/reset`. Re-applied whenever a neko session connects.
+- Viewer message `{t:"screen", w, h}` (device pixels: CSS size × displayScale,
+  even numbers, capped like VNC at 3840×2400) sets the display size through the
+  admin API, debounced 500 ms, last request wins. It keeps the engine screen
+  matched to the window, like VNC `SetDesktopSize`.
+
+### Client
+
+- `@m1k1o/neko` (pinned 3.2.0) is bundled into the web viewer. In Neo view the
+  viewer mounts its video + input layer into the Neo window area, connected to
+  `/neko`. If no video plays within 8 s, or ICE fails or disconnects for more
+  than 10 s, the viewer switches to VNC for the rest of that page load and
+  shows "VNC" in the bar; otherwise "WebRTC".
+- Everything else from "Neo view" still applies: click-to-take-control (the
+  first click is replayed once control arrives), Mac ⌘ → Ctrl, clipboard both
+  ways, desktop app commands as engine shortcuts, Follow in Watch mode.
+
 ## Control coordinator
 
 One server-wide state, persisted in `state.json`:
