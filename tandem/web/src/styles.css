@@ -5,3 +5,51 @@
 @media(max-width:1200px){.toolbar{flex-wrap:wrap;gap:8px}.toolbar-right{width:100%;justify-content:flex-end;gap:10px}.address-form{min-width:150px}.control-indicator{margin-right:auto}.tab{width:180px}.connection{min-width:auto}}
 @media(max-width:540px){.tab-row{padding-left:10px;padding-right:10px;gap:4px}.brand-mark{width:21px;height:21px;margin-right:0}.tab{min-width:138px}.connection{font-size:9px;padding-left:3px}.toolbar{padding:8px;gap:5px}.navigation .icon-button{width:28px}.toolbar-right{gap:6px;flex-wrap:wrap}.control-indicator{font-size:10px}.modes button{padding:4px 7px;font-size:10px}.desktop-button{width:28px;padding:0}.desktop-button span{display:none}.address-hint{display:none}.control-banner{font-size:10px;height:auto;min-height:35px;padding:4px;gap:3px}.control-banner button{font-size:10px;white-space:nowrap}.login-card{padding:28px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}.spinner{animation-duration:2s}}
+/* Neo owns the browser frame; Tandem only supplies its slim control bar. */
+.neo-bar{height:44px;display:flex;align-items:center;gap:12px;padding:0 12px;background:var(--background)}
+.neo-bar .brand-mark{width:23px;height:23px;margin:0;flex:none}
+.neo-bar .connection{padding:0;min-width:105px}
+.neo-bar .toolbar-right{width:auto;flex:1;min-width:0;justify-content:flex-end;gap:16px;flex-wrap:nowrap}
+.neo-bar .control-indicator{margin-right:auto;overflow:hidden;text-overflow:ellipsis}
+.neo-bar .desktop-button{display:none}
+.neo-bar .modes{padding:2px}
+.neo-bar .modes button{padding:3px 10px}
+.neo-view .tab-row,.neo-view .toolbar,.neo-view #page,.neo-view #empty{display:none}
+.neo-window{position:absolute;inset:0;overflow:hidden;background:var(--background)}
+.neo-window canvas{cursor:default}
+.neo-view .control-banner{height:27px;min-height:27px;padding:0 8px;font-size:10px}
+.neo-view .control-banner button{font-size:10px;padding:2px 6px}
+.neo-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:12px;background:var(--background);color:var(--text-muted);font-size:13px;pointer-events:none}
+.neo-loading .spinner{display:block;width:20px;height:20px}
+.notice button{margin-left:12px;padding:5px 8px;color:var(--agent);border-color:var(--border);white-space:nowrap}
+@media(max-width:700px){.neo-bar{gap:8px;padding:0 8px}.neo-bar .connection{min-width:0;font-size:9px}.neo-bar .toolbar-right{gap:5px}.neo-bar .control-indicator{font-size:10px}.neo-bar .modes button{padding:3px 6px;font-size:10px}}
+@media(max-width:480px){.neo-bar .control-indicator{display:none}.neo-bar .toolbar-right{margin-left:auto;flex:0}.neo-bar .brand-mark{width:20px;height:20px}.neo-bar .connection{flex:1}.neo-bar .menu{width:165px}}
+/* Neo view wears BrowserOS neo's own chrome colours, so Tandem's bar reads as part of Neo. */
+.neo-view{--neo-side:#E0EAEA;--neo-ink:#0F272C;--neo-muted:#4F5B5D;--neo-accent:#B9E2EB;--neo-track:#D1E0E4;--neo-line:#D3DFE1;--neo-you:#C96442}
+.neo-view .chrome{background:var(--neo-side);border-bottom:0}
+.neo-view .page-area,.neo-view .neo-window,.neo-view .neo-loading{background:var(--neo-side)}
+.neo-view .neo-loading{color:var(--neo-muted)}
+.neo-view .neo-bar{height:38px;gap:10px;padding:0 8px 0 12px;background:var(--neo-side);color:var(--neo-ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.neo-view .neo-bar .brand-mark{width:18px;height:18px;border-radius:5px}
+.neo-view .neo-bar .connection{color:var(--neo-muted);font-size:11px;min-width:86px}
+.neo-view .neo-bar .connection:before{background:var(--neo-muted)}
+.neo-view .neo-bar .connection.live:before{background:#2E8B6E}
+.neo-view .neo-bar .toolbar-right{gap:10px}
+.neo-view .neo-bar .control-indicator{margin-right:0;font-size:12px;font-weight:550;color:var(--neo-ink)}
+.neo-view .neo-bar .control-indicator:before{width:7px;height:7px;background:#3B82A0}
+.neo-view.manual .neo-bar .control-indicator{color:var(--neo-ink)}
+.neo-view.manual .neo-bar .control-indicator:before{background:var(--neo-you)}
+.neo-view .neo-bar #banner-action{margin-right:auto;height:26px;padding:0 12px;border:0;border-radius:999px;background:var(--neo-accent);color:var(--neo-ink);font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap}
+.neo-view .neo-bar #banner-action:hover:not(:disabled){background:color-mix(in srgb,var(--neo-accent) 80%,var(--neo-ink))}
+.neo-view .neo-bar .modes{padding:2px;border:0;border-radius:9px;background:var(--neo-track)}
+.neo-view .neo-bar .modes button{padding:3px 11px;border:0;border-radius:7px;font-size:12px;color:var(--neo-muted)}
+.neo-view .neo-bar .modes button[aria-pressed=true]{background:#fff;color:var(--neo-ink);box-shadow:0 1px 2px #0f272c26}
+.neo-view.manual .neo-bar .modes button[aria-pressed=true]{color:var(--neo-you)}
+.neo-view .neo-bar .icon-button{color:var(--neo-muted);border:0;width:28px;height:28px;border-radius:7px}
+.neo-view .neo-bar .icon-button:hover{background:var(--neo-track)}
+.neo-view .neo-window canvas{cursor:pointer}
+.neo-view.manual .neo-window canvas{cursor:default}
+/* Desktop app on macOS: the bar is the title bar. Leave room for the traffic lights and let it drag the window. */
+.desktop-mac.neo-view .neo-bar{padding-left:82px;-webkit-app-region:drag}
+.desktop-mac.neo-view .neo-bar button,.desktop-mac.neo-view .neo-bar .menu,.desktop-mac.neo-view .neo-bar .modes{-webkit-app-region:no-drag}
+@media(max-width:820px){.neo-view .neo-bar #banner-action{font-size:0;padding:0 10px}.neo-view .neo-bar #banner-action:after{content:"Take control";font-size:12px}.neo-view.manual .neo-bar #banner-action:after{content:"Hand back"}}

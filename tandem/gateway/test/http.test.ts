@@ -64,10 +64,12 @@ test('parallel login attempts cannot bypass per-IP rate limit', async () => {
 test('public assets cannot traverse into the protected app shell', async () => {
   const response = await fetch(base + '/assets/..%2findex.html'); expect(response.status).toBe(404);
 });
-test('desktop HTTP files require session; desktop socket also needs human control', async () => {
+test('desktop HTTP files require session; desktop upgrade requires cookie and Origin', async () => {
   expect((await fetch(base + '/desktop/')).status).toBe(401);
   const redirect = await fetch(base + '/desktop/', { headers: { cookie }, redirect: 'manual' }); expect(redirect.status).toBe(302); expect(redirect.headers.get('location')).toBe('/desktop/vnc.html?path=desktop/websockify&autoconnect=1&resize=remote&reconnect=1');
-  expect((await fetch(base + '/desktop/websockify', { headers: { cookie, origin, upgrade: 'websocket' } })).status).toBe(403);
+  expect((await fetch(base + '/desktop/websockify', { headers: { origin, upgrade: 'websocket' } })).status).toBe(401);
+  expect((await fetch(base + '/desktop/websockify', { headers: { cookie, origin: 'http://evil.example', upgrade: 'websocket' } })).status).toBe(403);
+  expect((await fetch(base + '/desktop/websockify', { headers: { cookie, upgrade: 'websocket' } })).status).toBe(403);
 });
 test('raw CDP, binary input and missing hello are protocol violations (4403)', async () => {
   for (const payload of [JSON.stringify({ t: 'Input.dispatchKeyEvent' }), new Uint8Array([1]), JSON.stringify({ t: 'ping', ts: 1 })]) {
@@ -99,6 +101,32 @@ test('control release bypasses an outstanding input command and revokes its disp
     for (let i = 0; i < 100 && !received.some(m => m.code === 'not_in_control'); i++) await Bun.sleep(5);
     expect(received.some(m => m.code === 'not_in_control')).toBe(true); expect(dispatched).toBe(false);
   } finally { unblock(); gateway.cdp.session = originalSession; gateway.cdp.send = originalSend; gateway.cdp.tabs.delete('delayed'); ws.close(); }
+});
+test('follow viewer messages are per socket, work without control and stop on disconnect', async () => {
+  const sockets: WebSocket[] = [], messages: any[][] = [], calls: string[] = [], original = gateway.cdp.activate;
+  const wait = async (fn: () => boolean) => { for (let i = 0; i < 200; i++) { if (fn()) return; await Bun.sleep(5); } throw new Error('Timed out'); };
+  const command = async (i: number, value: unknown) => {
+    const ts = crypto.randomUUID(); sockets[i]!.send(JSON.stringify(value)); sockets[i]!.send(JSON.stringify({ t: 'ping', ts }));
+    await wait(() => messages[i]!.some(m => m.t === 'pong' && m.ts === ts));
+  };
+  gateway.cdp.activate = async targetId => { calls.push(targetId); };
+  try {
+    for (let i = 0; i < 2; i++) {
+      const ws = new WebSocket(base.replace('http', 'ws') + '/ws', { headers: { cookie, origin } } as any); sockets.push(ws); messages.push([]);
+      ws.onmessage = e => messages[i]!.push(JSON.parse(String(e.data)));
+      await new Promise<void>(resolve => { ws.onopen = () => resolve(); });
+      await command(i, { t: 'hello', viewport: { w: 100, h: 100, dpr: 1 } });
+      await command(i, { t: 'follow', enabled: true });
+    }
+    expect(gateway.control.controller).toBe('agent'); await command(0, { t: 'follow', enabled: false });
+    gateway.cdp.emit('activity', { t: 'agent.activity', targetId: 'first' }); expect(calls).toEqual(['first']);
+    gateway.control.take((await (await fetch(base + '/api/me', { headers: { cookie } })).json() as any).sessionId);
+    gateway.cdp.emit('activity', { t: 'agent.activity', targetId: 'human' }); expect(calls).toEqual(['first']);
+    gateway.control.release();
+    await command(1, { t: 'follow', enabled: 'invalid' }); expect(messages[1]!.some(m => m.t === 'error' && m.code === 'command_failed')).toBe(true);
+    const closed = new Promise<void>(resolve => { sockets[1]!.onclose = () => resolve(); }); sockets[1]!.close(); await closed;
+    gateway.cdp.emit('activity', { t: 'agent.activity', targetId: 'disconnected' }); await Bun.sleep(550); expect(calls).toEqual(['first']);
+  } finally { gateway.cdp.activate = original; for (const ws of sockets) ws.close(); gateway.control.release(); }
 });
 test('socket welcome, typed input refusal, take/release, protocol violations, logout closes 4401', async () => {
   const ws = new WebSocket(base.replace('http', 'ws') + '/ws', { headers: { cookie, origin } } as any);

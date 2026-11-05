@@ -60,15 +60,15 @@ jobs:
       - name: Start disposable stack
         run: docker compose -f tandem/deploy/compose.ci.yaml --env-file tandem/deploy/neo-image.env up -d --wait --build
       - name: Gateway browser acceptance
-        working-directory: tandem/gateway
-        env:
-          TANDEM_URL: http://127.0.0.1:8790
-          TANDEM_ORIGIN: http://127.0.0.1:8790
-          TANDEM_TEST_PASSWORD: tandem-local-test-password
-          TANDEM_AGENT_TOKEN: tandem-local-test-token-00000000000000000000
+        # Inside the engine's network namespace, like the gateway itself, so the
+        # test can confirm VNC input effects through the engine's loopback CDP.
         run: |
-          bun install --frozen-lockfile
-          bun run e2e
+          docker run --rm --network container:tandem-ci-neo-1 \
+            -v "$PWD:/repo" -w /repo/tandem/gateway \
+            -e TANDEM_URL=http://127.0.0.1:8790 -e TANDEM_ORIGIN=http://127.0.0.1:8790 \
+            -e TANDEM_TEST_PASSWORD=tandem-local-test-password \
+            -e TANDEM_AGENT_TOKEN=tandem-local-test-token-00000000000000000000 \
+            oven/bun:1.3.14 sh -c 'bun install --frozen-lockfile && bun run e2e'
       - name: Failure logs
         if: failure()
         run: docker compose -f tandem/deploy/compose.ci.yaml --env-file tandem/deploy/neo-image.env logs --no-color

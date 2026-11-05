@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 TANDEM_REPO_ROOT=$(cd ../.. && pwd)
 TANDEM_RUN_ID="$$"
-TANDEM_NEO_CONTAINER="tandem-gateway-e2e-neo-$TANDEM_RUN_ID"
+TANDEM_NEO_CONTAINER="${TANDEM_TEST_NEO_CONTAINER:-tandem-gateway-e2e-neo-$TANDEM_RUN_ID}"
 TANDEM_GATEWAY_CONTAINER="tandem-gateway-e2e-gateway-$TANDEM_RUN_ID"
 TANDEM_E2E_CONTAINER="tandem-gateway-e2e-test-$TANDEM_RUN_ID"
 TANDEM_E2E_DATA_DIR="$HOME/.cache/tandem-dev/gateway-e2e-$TANDEM_RUN_ID"
@@ -16,9 +16,14 @@ cleanup() {
   docker rm -f "$TANDEM_E2E_CONTAINER" "$TANDEM_GATEWAY_CONTAINER" "$TANDEM_NEO_CONTAINER" >/dev/null 2>&1 || true
   rm -rf "$TANDEM_E2E_DATA_DIR"
 }
+if docker container inspect "$TANDEM_NEO_CONTAINER" >/dev/null 2>&1; then
+  echo "Refusing to replace existing container $TANDEM_NEO_CONTAINER" >&2
+  exit 1
+fi
 trap cleanup EXIT
 mkdir -p "$TANDEM_E2E_DATA_DIR"
 docker run -d --name "$TANDEM_NEO_CONTAINER" --shm-size=1g --hostname neo \
+  -e NEO_DISABLE_BROWSEROS_EXTENSIONS=false -e "NEO_ARGS=--disable-browseros-features=AvatarButton" \
   -v "$TANDEM_E2E_DATA_DIR:/data" "$TANDEM_NEO_IMAGE" >/dev/null
 for ((i=0; i<120; i++)); do
   if [ "$(docker inspect --format '{{.State.Health.Status}}' "$TANDEM_NEO_CONTAINER")" = healthy ]; then break; fi

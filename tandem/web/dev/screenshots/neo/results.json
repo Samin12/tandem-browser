@@ -1,0 +1,29 @@
+{
+  "checks": [
+    "default Neo connects to the real VNC engine",
+    "Neo follows Watch without subscribing to screencasts",
+    "Tandem bar is 44px",
+    "Neo spans the viewport without margins or overflow",
+    "server control acknowledgment enables VNC input",
+    "VNC contains a rendered real window, not an empty canvas",
+    "window title and paused agent indicator",
+    "desktop new-tab changes the real engine tab count",
+    "desktop close-tab changes the real engine tab count",
+    "Mac Command Shift T reaches the real engine as balanced Control Shift T",
+    "desktop paste pushes clipboard before sending Control V",
+    "real VNC clipboard event writes through the desktop bridge",
+    "view-only Neo resizes edge to edge without letterboxing",
+    "agent viewing stays on the same live VNC connection after release",
+    "Agent mode disables follow",
+    "commands without control send no keys and explain takeover",
+    "view-only click offers explicit takeover without taking control",
+    "Watch mode enables follow",
+    "VNC reconnects with visible backoff state",
+    "switching to Lite during a viewer disconnect reconnects, persists, disables follow and receives screencasts",
+    "saved Lite survives revisiting the default URL",
+    "explicit Neo overrides preference and has no screencast subscription",
+    "390px Neo bar has no horizontal overflow",
+    "no browser runtime exceptions (0)"
+  ],
+  "runtimeErrors": []
+}

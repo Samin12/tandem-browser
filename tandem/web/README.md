@@ -51,7 +51,57 @@ Authenticated development helpers (not part of the gateway contract):
 POST helpers require the session, `Origin` and `X-Tandem: 1` headers. The visual
 check demonstrates their use. The production viewer never calls these routes.
 
-Known acceptance limits: tests use headless Chrome and an injected desktop
-bridge. Real gateway/CDP streaming, native Electron menus, OS IME candidate
-windows, clipboard permissions in other browsers, and the proxied noVNC desktop
-still need integration acceptance with their respective components.
+The mock checks use headless Chrome and an injected desktop bridge. Real-engine
+acceptance is described below. Native Electron menus, OS IME candidate windows
+and clipboard permissions in other browsers still need acceptance with their
+respective components.
+
+Neo view is the default at `/`: the gateway serves its engine's noVNC ES module
+at runtime, so noVNC is never bundled into this viewer. The 44px Tandem bar
+shares the existing control coordinator, mode preference, audit dialog, login
+and desktop bridge. Watch enables gateway follow; Agent disables it. Input is
+view-only until a `control` acknowledgment confirms this session holds control.
+The gateway independently filters VNC input. A narrow noVNC 1.3 compatibility
+shim allows its resize method to run in view-only mode; the RFB instance and
+input handlers keep their real view-only state. This matches the gateway's
+permission for every viewer to resize the desktop. Losing the viewer socket also
+makes VNC view-only while it reconnects.
+
+The menu switches between Neo and the original screencast **Lite view**.
+`/?view=lite` and `/?view=neo` override and save `tandem.view`; blocked storage
+is optional. Switching resets the viewer socket to drop its old screencast
+subscription. Neo does not subscribe to screencasts or duplicate native dialogs.
+Mac Command shortcuts become Linux Control shortcuts; Command-Q/H/M/backtick
+stay local. Clipboard access uses the desktop bridge when available, native
+paste events in a browser, then the browser Clipboard API (which may require
+permission). Remote clipboard writes also require browser permission outside
+the desktop app.
+
+Real Neo acceptance (headless Chrome only, disposable engine and volumes):
+
+```sh
+# From tandem/deploy. This project name and port avoid existing containers.
+TANDEM_PORT=18790 docker compose -p tandem-neo-web-check \
+  --env-file neo-image.env -f compose.ci.yaml \
+  -f ../web/dev/neo-compose.override.yaml up -d --wait --build
+
+# From tandem/web. Read the existing test-only password without storing it.
+TANDEM_PASSWORD="$(docker compose -p tandem-neo-web-check \
+  --env-file ../deploy/neo-image.env -f ../deploy/compose.ci.yaml \
+  -f dev/neo-compose.override.yaml config --format json | \
+  bun -e 'const c=await Bun.stdin.json();process.stdout.write(c.services.gateway.environment.TANDEM_PASSWORD)')" \
+  bun dev/neo-visual-check.ts
+
+# From tandem/deploy. Remove only this acceptance stack and its volumes.
+TANDEM_PORT=18790 docker compose -p tandem-neo-web-check \
+  --env-file neo-image.env -f compose.ci.yaml \
+  -f ../web/dev/neo-compose.override.yaml down -v
+```
+
+The override enables Neo extensions and toolbar features. The gateway image
+builds and serves the viewer without host bind mounts.
+The real check saves 1440×900 Manual, Agent, Watch and Lite captures (plus a
+390px capture) and `results.json` under `dev/screenshots/neo/`. It exercises real
+VNC shortcuts/clipboard/control and uses a simulated desktop preload; it does
+not launch Electron or prove native menu delivery. `dev/visual-check.ts` keeps
+using Lite against the mock, which deliberately has no VNC implementation.

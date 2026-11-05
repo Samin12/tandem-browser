@@ -4,7 +4,7 @@ import { decodeBase32 } from './security';
 export interface Config {
   hostname: string; port: number; origins: string[]; production: boolean;
   passwordHash: string; totpSecret?: string; agentToken: string; dataDir: string;
-  idleMs: number; maxMs: number; holdMs: number; cdpUrl: string;
+  idleMs: number; maxMs: number; holdMs: number; displayScale: number; cdpUrl: string;
   mcpUrl: string; novncUrl: string; publicDir: string; brandFile: string;
 }
 
@@ -51,6 +51,8 @@ export async function loadConfig(env: Record<string, string | undefined> = proce
     idleMs: positive('TANDEM_SESSION_IDLE_HOURS', 12) * 3600000,
     maxMs: positive('TANDEM_SESSION_MAX_HOURS', 72) * 3600000,
     holdMs: positive('TANDEM_AGENT_HOLD_SECONDS', 120) * 1000,
+    // Must match the engine's --force-device-scale-factor (compose passes both from one value).
+    displayScale: Math.min(3, positive('TANDEM_DISPLAY_SCALE', 1)),
     cdpUrl: endpoint('TANDEM_CDP_URL', 'http://127.0.0.1:9110'),
     mcpUrl: endpoint('TANDEM_NEO_MCP_URL', 'http://127.0.0.1:9010/mcp'),
     novncUrl: endpoint('TANDEM_NOVNC_URL', 'http://127.0.0.1:6080'),

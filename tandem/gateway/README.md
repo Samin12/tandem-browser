@@ -63,7 +63,9 @@ TANDEM_TEST_GATEWAY_IMAGE=tandem-gateway:local-test bash test/run-live.sh
 
 The helper creates uniquely named Neo, gateway and test containers, uses the
 pinned image from `../deploy/neo-image.env`, generates passwords/tokens/TOTP
-secrets in memory, and removes its containers and test profile on exit. Source
+secrets in memory, enables Neo's full browser UI, and removes its containers and
+test profile on exit. Set `TANDEM_TEST_NEO_CONTAINER` to choose the engine container
+name; an existing container is never replaced. Source
 mode runs the gateway in `oven/bun:1` with the placeholder public directory. Image
 mode additionally checks uid, file permissions, built public assets and Docker's
 HEALTHCHECK. It never uses or removes `tandem-probe-neo`.
@@ -83,6 +85,20 @@ control/session guard checked again before every attempt. Other command failures
 are not retried. Tabs already present at discovery have `opener:"unknown"`;
 subsequent creations retain agent/human provenance across CDP reconnects.
 `activeTargetId` is best effort as specified by the protocol.
+
+Authenticated desktop sockets stay open across control changes. A streaming RFB
+3.8 filter gates complete keyboard, pointer and clipboard messages against current
+control, including messages split across WebSocket frames. Partial messages are
+bounded at 1 MiB, with a 10 MiB total exception for signed-length clipboard
+messages; individual WebSocket payloads are capped at 10 MiB. Unknown RFB types
+close with 4403 and log only their type and rejection reason. Desktop sockets count
+as session connections for the control disconnect grace period.
+
+Viewer `follow` is per socket. Any enabled viewer makes agent activity activate
+the latest tab at most once per 500 ms. Human takeover, disabling the last follower,
+session revocation and disconnection cancel pending follow work. The live desktop
+check uses a separate CDP probe inside the test network to observe DOM input events
+and requires `TANDEM_TEST_CDP_URL` only when CDP is not at `http://127.0.0.1:9110`.
 
 The gateway explicitly terminates its sockets at shutdown. Bun 1.3 can leave the
 promise from `server.stop(true)` pending after a completed WebSocket handshake;

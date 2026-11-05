@@ -59,7 +59,8 @@ non-GET JSON requests must also send `X-Tandem: 1`.
 | `GET /api/health` | none | `{ok, cdp:boolean, mcp:boolean, version}`; never leaks URLs or titles |
 | `GET /api/audit?limit=200` | session | Last audit entries |
 | `GET /ws` (upgrade) | session + Origin | Viewer socket, below |
-| `GET /desktop/*` | session; WebSocket part also needs human control | Neo's own noVNC page, proxied (full raw desktop, fallback for native popups) |
+| `GET /desktop/*` | session | Neo's own noVNC files, proxied. The Neo view imports `/desktop/core/rfb.js` from here, so the client always matches the engine's noVNC. |
+| `GET /desktop/websockify` (upgrade) | session + Origin | The engine's VNC stream. Any signed-in viewer may watch; the gateway drops keyboard, mouse and clipboard messages from sessions that don't hold control (see "Neo view"). |
 | `POST /mcp`, `GET /mcp`, `DELETE /mcp` | `Authorization: Bearer $TANDEM_AGENT_TOKEN` | Neo MCP proxy with control gating |
 
 Responses on every route: `Cache-Control: no-store` for `/api/*`,
@@ -131,6 +132,70 @@ growing lag. A tab behind other tabs in the real browser only paints while
 someone views it: the server enables `Emulation.setFocusEmulationEnabled` on its
 own session for viewed tabs, and if no frame arrives within 1 s it falls back to
 `Page.captureScreenshot` every 250 ms until frames flow.
+
+## Neo view (default)
+
+The viewer's main mode streams BrowserOS neo's real window (vertical tabs, Neo
+dashboard, toolbar, extensions, native popups) over VNC instead of redrawing a
+browser frame. Upstream UI changes therefore show up in Tandem with no Tandem
+work. The screencast UI above stays available as **Lite view** (menu, or
+`/?view=lite`), for phones and slow links.
+
+Engine settings that make the real UI visible (compose files):
+`NEO_DISABLE_BROWSEROS_EXTENSIONS=false` (Neo's dashboard is an extension) and
+`NEO_ARGS=--disable-browseros-features=AvatarButton` (replaces upstream's list
+that hides vertical tabs, home, split, tab search, extensions toolbar and the new
+tab page). A one-shot `neo-prefs` service turns vertical tabs on in a new
+profile (`vertical_tabs.enabled` and `browseros.vertical_tabs_enabled`), once;
+after that the user's own choice in Neo wins.
+
+### VNC input filter
+
+`/desktop/websockify` relays RFB 3.8 between the viewer and the engine's Xvnc
+(security type None, so authentication is the gateway session). The gateway
+parses the client-to-server stream:
+
+| Phase / message | Size | Forwarded |
+|---|---|---|
+| ProtocolVersion, security type, ClientInit | 12 + 1 + 1 bytes | always |
+| 0 SetPixelFormat | 20 | always |
+| 2 SetEncodings | 4 + 4·n | always |
+| 3 FramebufferUpdateRequest | 10 | always |
+| 150 EnableContinuousUpdates | 10 | always |
+| 248 ClientFence | 9 + payload length | always |
+| 251 SetDesktopSize | 8 + 16·screens | always (the window you look through sets the screen size) |
+| 4 KeyEvent | 8 | only from the session holding control |
+| 5 PointerEvent | 6 | only from the session holding control |
+| 6 ClientCutText | 8 + abs(length) | only from the session holding control |
+| 255 QEMU extended key event | 12 | only from the session holding control |
+| anything else | | connection closed (4403) |
+
+Messages are reassembled across WebSocket frames before filtering. Server to
+client traffic is passed through untouched. Losing control no longer closes the
+socket; input is simply dropped from then on.
+
+### Follow (Watch mode)
+
+Viewer message `{t:"follow", enabled:boolean}` (always allowed). While at least
+one connected viewer has follow on and `controller=agent`, the gateway brings
+the agent's tab to the front (`Target.activateTarget`) on each `agent.activity`,
+at most once per 500 ms, so the streamed Neo window shows what the agent is
+doing. It never does this while a person holds control.
+
+### Viewer behaviour in Neo view
+
+- Layout: a slim Tandem bar (logo, connection, who is driving, Watch / Agent /
+  Manual, menu with Lite view, Audit log, Log out) above the full-size Neo window.
+- noVNC `RFB` from `/desktop/core/rfb.js` (dynamic import), `scaleViewport` and
+  `resizeSession` on, `viewOnly` unless this session holds control.
+- On a Mac client, ⌘+key is sent to the remote as Ctrl+key (the engine is Linux).
+- Clipboard: remote copy (`clipboard` event) is written to the local clipboard;
+  ⌘V/Ctrl+V pushes local text with `clipboardPasteFrom` then sends Ctrl+V.
+- Desktop app commands map to engine shortcuts while in control: new-tab Ctrl+T,
+  close-tab Ctrl+W, focus-address Ctrl+L, reload Ctrl+R, stop Escape, back
+  Alt+Left, forward Alt+Right, next/prev-tab Ctrl+(Shift+)Tab, select-tab:N
+  Ctrl+N, edit-* Ctrl+Z / Ctrl+Shift+Z / Ctrl+X / Ctrl+C / paste / Ctrl+A.
+  Without control they show "Take control first".
 
 ## Control coordinator
 

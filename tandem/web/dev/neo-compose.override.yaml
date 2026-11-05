@@ -1,0 +1,9 @@
+# Isolated, disposable real-engine acceptance stack. No host browser is used.
+services:
+  neo:
+    environment:
+      NEO_DISABLE_BROWSEROS_EXTENSIONS: 'false'
+      NEO_ARGS: --disable-browseros-features=AvatarButton
+  gateway:
+    environment:
+      TANDEM_PUBLIC_ORIGIN: http://127.0.0.1:18790

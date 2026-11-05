@@ -59,7 +59,7 @@ try {
   await cdp('Page.enable'); await cdp('Runtime.enable');
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   // Exercise the native preload bridge without installing or launching Electron.
-  await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `window.tandemDesktop={isDesktop:true,platform:'darwin',version:'test',onCommand(cb){window.desktopCommand=cb;return()=>{}},writeClipboard(text){window.copiedText=text},readClipboard(){return 'Pasted from desktop'},openSettings(){window.settingsOpened=true}}` });
+  await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('tandem.view','lite');window.tandemDesktop={isDesktop:true,platform:'darwin',version:'test',onCommand(cb){window.desktopCommand=cb;return()=>{}},writeClipboard(text){window.copiedText=text},readClipboard(){return 'Pasted from desktop'},openSettings(){window.settingsOpened=true}}` });
   await cdp('Page.navigate', { url: origin });
   await waitFor("location.pathname==='/login' && !document.querySelector('#login-submit')?.disabled", 'login config');
   check(await js("document.querySelector('#totp-field').hidden") === !totp, 'TOTP field matches auth-config');
