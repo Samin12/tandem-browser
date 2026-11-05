@@ -13,9 +13,10 @@ import { McpProxy } from './mcp';
 import { parkPointer } from './pointer';
 import { RfbFilter, CUT_TEXT_LIMIT } from './rfb';
 import { Follow } from './follow';
+import { Neko, nekoRoute } from './neko';
 
 export const VERSION = '0.1.0';
-interface SocketData { kind: 'viewer' | 'desktop'; sessionId: string; hello: boolean; viewport: { w: number; h: number; dpr: number }; targetId?: string; upstream?: WebSocket; rfb?: RfbFilter; queue: Promise<void>; openedAt: number }
+interface SocketData { kind: 'viewer' | 'desktop' | 'neko'; sessionId: string; hello: boolean; viewport: { w: number; h: number; dpr: number }; targetId?: string; upstream?: WebSocket; rfb?: RfbFilter; queue: Promise<void>; openedAt: number }
 type Socket = ServerWebSocket<SocketData>;
 class NotInControl extends Error {}
 export function createGateway(config: Config) {
@@ -23,6 +24,7 @@ export function createGateway(config: Config) {
   const cdp = new Cdp(config.cdpUrl, () => control.controller === 'agent'), screencasts = new Screencasts(cdp);
   const mcp = new McpProxy(config, control, audit, cdp), limiter = new RateLimit();
   const viewers = new Set<Socket>(), desktops = new Set<Socket>(), follow = new Follow(cdp, control);
+  const neko = new Neko(config, sessions, control);
   const loginQueues = new Map<string, Promise<void>>();
   let brand: Record<string, unknown>;
   try { brand = JSON.parse(readFileSync(config.brandFile, 'utf8')); if (!brand || typeof brand !== 'object' || Array.isArray(brand)) throw 0; }
@@ -39,12 +41,13 @@ export function createGateway(config: Config) {
   let lastController = control.controller;
   control.onChange = () => {
     for (const ws of viewers) send(ws, { t: 'control', ...control.state(ws.data.sessionId) });
-    follow.changed();
+    follow.changed(); neko.changed();
     // A person just handed back: park the X pointer so watchers don't see a frozen arrow.
     if (lastController === 'human' && control.controller === 'agent') void parkPointer();
     lastController = control.controller;
   };
   sessions.onRevoke = id => {
+    neko.revoke(id);
     for (const ws of [...viewers, ...desktops]) if (ws.data.sessionId === id) { follow.set(ws, false); ws.close(4401, 'Session expired'); }
     control.release(id);
   };
@@ -81,8 +84,9 @@ export function createGateway(config: Config) {
       server.timeout(req, 0);
       return mcp.handle(req);
     }
-    if (!checkOrigin(req, config.origins, path === '/ws' || path === '/desktop/websockify')) return fail('forbidden_origin', 403);
-    if (path === '/api/health' && req.method === 'GET') return Response.json({ ok: cdp.connected && mcp.healthy, cdp: cdp.connected, mcp: mcp.healthy, version: VERSION });
+    if (!checkOrigin(req, config.origins, path === '/ws' || path === '/desktop/websockify' || path === '/neko/api/ws')
+      || (path.startsWith('/neko/') && req.headers.has('origin') && !config.origins.includes(req.headers.get('origin')!))) return fail('forbidden_origin', 403);
+    if (path === '/api/health' && req.method === 'GET') return Response.json({ ok: cdp.connected && mcp.healthy, cdp: cdp.connected, mcp: mcp.healthy, neko: await neko.health(), version: VERSION });
     // A bearer credential is intentionally never a viewer credential, even alongside a cookie.
     if (req.headers.has('authorization')) return fail('unauthorized', 401);
     if (path === '/api/auth-config' && req.method === 'GET') return Response.json({ totp: !!config.totpSecret, productName: brand.productName ?? 'Tandem Browser' });
@@ -111,6 +115,19 @@ export function createGateway(config: Config) {
     }
     if (path === '/brand.json' && req.method === 'GET') return Response.json(brand);
     const session = requireSession(req);
+    if (path.startsWith('/neko/')) {
+      if (!session) return fail('unauthorized', 401);
+      const target = path.slice('/neko'.length);
+      if (!neko.enabled || !nekoRoute(req.method, target)) return fail('not_found', 404);
+      if (target !== '/api/ws') return neko.proxy(session.id, target);
+      if (req.headers.get('upgrade')?.toLowerCase() !== 'websocket') return fail('upgrade_required', 426);
+      let upstream: WebSocket;
+      try { upstream = await neko.socket(session.id); } catch { return fail('neko_unavailable', 502); }
+      if (!sessions.byId(session.id)) { upstream.close(); return fail('unauthorized', 401); }
+      if (server.upgrade(req, { headers: securityHeaders(path), data: { kind: 'neko', sessionId: session.id, upstream, hello: false,
+        viewport: { w: 1600, h: 1000, dpr: 1 }, queue: Promise.resolve(), openedAt: Date.now() } })) return undefined;
+      upstream.close(); return fail('upgrade_failed', 400);
+    }
     if (path === '/ws' || path === '/desktop/websockify') {
       if (!session) return fail('unauthorized', 401);
       if (req.method !== 'GET' || req.headers.get('upgrade')?.toLowerCase() !== 'websocket') return fail('upgrade_required', 426);
@@ -124,7 +141,7 @@ export function createGateway(config: Config) {
     }
     if (path.startsWith('/api/')) {
       if (!session) return fail('unauthorized', 401);
-      if (path === '/api/me' && req.method === 'GET') return Response.json({ user: 'owner', sessionId: session.id, expiresAt: session.expiresAt, totp: !!config.totpSecret, displayScale: config.displayScale });
+      if (path === '/api/me' && req.method === 'GET') return Response.json({ user: 'owner', sessionId: session.id, expiresAt: session.expiresAt, totp: !!config.totpSecret, displayScale: config.displayScale, webrtc: await neko.health() });
       if (path === '/api/audit' && req.method === 'GET') return Response.json(audit.tail(Number(url.searchParams.get('limit')) || 200));
       if (path === '/api/logout' && req.method === 'POST') {
         sessions.revoke(session.id); audit.write('human', 'logout', {}, { sessionId: session.id });
@@ -169,6 +186,7 @@ export function createGateway(config: Config) {
     if (!ws.data.hello && m.t !== 'hello') { ws.close(4403, 'hello required'); return; }
     try {
       if (m.t === 'hello') { if (ws.data.hello) throw new Error('Duplicate hello'); ws.data.viewport = viewport(m.viewport); ws.data.hello = true; return; }
+      if (m.t === 'screen') { neko.screen(ws.data.sessionId, m.w, m.h); return; }
       if (m.t === 'follow') { if (typeof m.enabled !== 'boolean') throw new Error('Invalid follow'); follow.set(ws, m.enabled); return; }
       if (m.t === 'viewport') { ws.data.viewport = viewport(m); screencasts.viewport(ws, ws.data.viewport); return; }
       if (m.t === 'ping') { send(ws, { t: 'pong', ts: m.ts, serverTs: Date.now() }); return; }
@@ -216,6 +234,7 @@ export function createGateway(config: Config) {
       maxPayloadLength: CUT_TEXT_LIMIT, idleTimeout: 120, backpressureLimit: 4 * 1024 * 1024, closeOnBackpressureLimit: false,
       open(ws) {
         control.connected(ws.data.sessionId);
+        if (ws.data.kind === 'neko') { neko.attach(ws); return; }
         if (ws.data.kind === 'viewer') {
           viewers.add(ws);
           send(ws, { t: 'welcome', sessionId: ws.data.sessionId, brand, control: control.state(ws.data.sessionId), tabs: [...cdp.tabs.values()], activeTargetId: cdp.activeTargetId ?? null, serverVersion: VERSION });
@@ -239,6 +258,7 @@ export function createGateway(config: Config) {
         }
       },
       message(ws, data) {
+        if (ws.data.kind === 'neko') { neko.message(ws, data); return; }
         if (ws.data.kind === 'desktop') { void message(ws, data).catch(() => ws.close(4403, 'Protocol violation')); return; }
         // Control transitions must not wait behind an outstanding browser command.
         if (ws.data.kind === 'viewer' && typeof data === 'string') {
@@ -249,20 +269,21 @@ export function createGateway(config: Config) {
         }
         ws.data.queue = ws.data.queue.then(() => message(ws, data)).catch(() => ws.close(4403, 'Protocol violation'));
       },
-      close(ws) { follow.set(ws, false); viewers.delete(ws); desktops.delete(ws); screencasts.unsubscribe(ws); ws.data.upstream?.close(); control.disconnected(ws.data.sessionId); },
+      close(ws) { if (ws.data.kind === 'neko') neko.detach(ws); follow.set(ws, false); viewers.delete(ws); desktops.delete(ws); screencasts.unsubscribe(ws); ws.data.upstream?.close(); control.disconnected(ws.data.sessionId); },
     },
   });
   const timer = setInterval(() => {
-    sessions.sweep(); limiter.sweep();
+    sessions.sweep(); limiter.sweep(); neko.sweep();
     for (const ws of [...viewers, ...desktops]) {
       if (!sessions.byId(ws.data.sessionId)) ws.close(4401, 'Session expired');
       else if (ws.data.kind === 'viewer' && !ws.data.hello && Date.now() - ws.data.openedAt > 10000) ws.close(4403, 'hello required');
     }
   }, 1000);
-  cdp.start(); mcp.start(); log('gateway.started', { port: server.port! });
+  cdp.start(); mcp.start(); neko.start(); log('gateway.started', { port: server.port! });
   if (control.controller === 'agent') void parkPointer();
-  return { server, sessions, control, cdp, mcp, audit, async close() {
+  return { server, sessions, control, cdp, mcp, audit, neko, async close() {
     clearInterval(timer); clearTimeout(tabsTimer); follow.close(); mcp.close(); screencasts.close(); cdp.close();
+    await neko.close();
     for (const ws of [...viewers, ...desktops]) ws.terminate();
     // Bun 1.3 can leave stop() pending after a completed WebSocket close handshake.
     void server.stop(true); server.unref(); control.close(); sessions.close(); audit.close();

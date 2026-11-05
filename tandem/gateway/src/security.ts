@@ -86,7 +86,7 @@ export function securityHeaders(path: string) {
     'x-frame-options': 'DENY', 'content-security-policy': path.startsWith('/desktop/')
       ? "default-src 'self'; img-src 'self' data: blob:; connect-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'; frame-ancestors 'none'" : CSP,
   });
-  if (path.startsWith('/api/')) headers.set('cache-control', 'no-store');
+  if (path.startsWith('/api/') || path.startsWith('/neko/')) headers.set('cache-control', 'no-store');
   return headers;
 }
 export function navigationUrl(input: string): string {
