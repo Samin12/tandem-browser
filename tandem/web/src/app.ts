@@ -1,4 +1,8 @@
 import { loadBrand } from './brand';
+import { NeoView } from './neo';
+import type { NeoStatus } from './neo';
+import { selectView, persistView } from './view';
+import type { View } from './view';
 import { displayUrl, fitFrame, mapPointer, parseFrame } from './frame';
 import { ClickCounter, keyMessage, modifiers, mouseButton, wheelDelta } from './input';
 import { commandRoute, selectedTabIndex } from './commands';
@@ -11,6 +15,15 @@ const remoteDialog = $<HTMLDialogElement>('remote-dialog');
 const auditDialog = $<HTMLDialogElement>('audit-dialog');
 const mac = window.tandemDesktop ? window.tandemDesktop.platform === 'darwin' : /Mac/i.test(navigator.platform);
 let brand: Brand;
+const viewStorage = { getItem: (key: string) => localStorage.getItem(key), setItem: (key: string, value: string) => localStorage.setItem(key, value) };
+let view = selectView(location.search, viewStorage);
+let neo: NeoView | undefined;
+let neoStatus: NeoStatus = 'connecting';
+const logo = document.querySelector<HTMLElement>('.brand-mark')!;
+const tabRow = document.querySelector<HTMLElement>('.tab-row')!;
+const toolbarRight = document.querySelector<HTMLElement>('.toolbar-right')!;
+const neoBar = $('neo-bar');
+
 let tabs: RemoteTab[] = [];
 let viewedId = '', activeId = '';
 let control: Control = { controller: 'agent', yours: false, since: 0, agentBusy: false, pendingAgentCalls: 0 };
@@ -36,21 +49,48 @@ let lastPointer: PointerEvent | undefined;
 let moveRaf = 0, composing = false;
 const mode = () => control.yours ? 'manual' : preference;
 const tab = () => tabs.find(item => item.targetId === viewedId);
-const canInput = () => connected && control.yours && !!tab();
+const canInput = () => view === 'lite' && connected && control.yours && !!tab();
 function send(message: Message) {
   if (socket?.readyState !== WebSocket.OPEN) return false;
   socket.send(JSON.stringify(message)); return true;
 }
 function remote(message: Message) { return canInput() && send({ ...message, targetId: viewedId }); }
-function notify(message: string) {
-  $('notice').textContent = message; $('notice').hidden = false;
+function follow() { send({ t: 'follow', enabled: view === 'neo' && preference === 'watch' && !control.yours }); }
+function applyView() {
+  document.body.classList.toggle('neo-view', view === 'neo');
+  neoBar.hidden = view !== 'neo'; $('neo-window').hidden = view !== 'neo';
+  if (view === 'neo') { neoBar.append(logo, $('connection'), toolbarRight); neo?.start(); }
+  else { tabRow.prepend(logo); tabRow.append($('connection')); document.querySelector('.toolbar')!.append(toolbarRight); neo?.stop(); }
+  $('switch-view').textContent = view === 'neo' ? 'Lite view' : 'Neo view';
+}
+function switchView(next: View) {
+  releaseInputs();
+  view = next; persistView(view, viewStorage);
+  const url = new URL(location.href); url.searchParams.set('view', view); history.replaceState(null, '', url);
+  // Reset the viewer socket to drop any old Lite screencast subscription.
+  send({ t: 'follow', enabled: false }); connected = false; neo?.setControl(control, false);
+  clearTimeout(reconnectTimer);
+  const willClose = socket && socket.readyState !== WebSocket.CLOSED;
+  socket?.close();
+  if (!willClose && brand) scheduleReconnect();
+  applyView(); render(); draw();
+}
+
+function notify(message: string, takeControl = false) {
+  $('notice').replaceChildren(document.createTextNode(message));
+  if (takeControl) {
+    const button = document.createElement('button'); button.textContent = 'Take control';
+    button.onclick = () => setMode('manual'); $('notice').append(button);
+  }
+  $('notice').hidden = false;
   clearTimeout(noticeTimer); noticeTimer = setTimeout(() => { $('notice').hidden = true; }, 5000);
 }
 function viewport() {
-  const rect = canvas.getBoundingClientRect();
+  const rect = (view === 'neo' ? $('neo-window') : canvas).getBoundingClientRect();
   return { w: Math.max(1, Math.round(rect.width)), h: Math.max(1, Math.round(rect.height)), dpr: window.devicePixelRatio || 1 };
 }
 function draw() {
+  if (view === 'neo') return;
   const { w, h, dpr } = viewport();
   if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
@@ -67,6 +107,7 @@ function draw() {
   $('empty-description').textContent = tabs.length ? 'Waiting for the first live frame…' : control.yours ? 'Open a new tab to get started.' : `Your tabs will appear when ${brand?.agentName ?? 'the agent'} opens a page.`;
 }
 function selectTab(targetId: string, activate = control.yours) {
+  if (view === 'neo') return;
   if (!tabs.some(item => item.targetId === targetId)) return;
   releaseInputs();
   if (viewedId !== targetId) { incomingFrame++; frame?.image.close(); frame = undefined; }
@@ -125,7 +166,8 @@ function render() {
   $<HTMLButtonElement>('desktop-view').disabled = !connected || !control.yours;
   const pending = control.pendingAgentCalls;
   const driver = control.yours ? "You're driving" : control.controller === 'human' ? `${control.holderLabel || 'Another viewer'} is driving` : `${agent} is driving`;
-  $('control-indicator').textContent = `${driver}${pending ? ` · ${pending} waiting` : ''}`;
+  $('control-indicator').textContent = view === 'neo' && control.yours ? `${driver} · ${agent} paused${pending ? ` (${pending} waiting)` : ''}` : `${driver}${pending ? ` · ${pending} waiting` : ''}`;
+  $('control-banner').hidden = view === 'neo' && control.yours;
   $('control-indicator').title = control.agentBusy ? 'An agent call is finishing. Already-running calls cannot be interrupted.' : driver;
   $('banner-text').textContent = control.yours ? `You're driving · ${agent} is paused${pending ? ` (${pending} waiting)` : ''}${control.agentBusy ? ' · One call is finishing' : ''}` : driver;
   $('banner-action').textContent = control.yours ? `Hand back to ${agent}` : 'Take control';
@@ -135,19 +177,26 @@ function render() {
   }
   renderConnection();
   canvas.setAttribute('aria-label', enabled ? 'Remote browser page. Click to focus, then type or use the keyboard.' : `${driver}. Take manual control to interact.`);
-  document.title = `${current?.title || 'New tab'} — ${brand?.productName ?? 'Browser'}`;
+  const titled = view === 'neo' ? tabs.find(item => item.targetId === activeId) : current;
+  document.title = titled?.title ? `${titled.title} — Tandem Browser` : 'Tandem Browser';
+  neo?.setControl(control, connected);
   renderDialog();
 }
 function renderConnection() {
-  $('connection').textContent = connected ? latency === undefined ? 'Live' : `Live · ${latency} ms` : reconnecting ? 'Reconnecting…' : 'Connecting…';
-  $('connection').classList.toggle('live', connected);
+  const live = connected && (view === 'lite' || neoStatus === 'live');
+  const retrying = reconnecting || view === 'neo' && neoStatus === 'reconnecting';
+  $('neo-loading').hidden = view !== 'neo' || neoStatus === 'live';
+  $('neo-loading-text').textContent = retrying ? 'Reconnecting…' : 'Connecting to your browser…';
+  $('connection').textContent = live ? latency === undefined ? 'Live' : `Live · ${latency} ms` : retrying ? 'Reconnecting…' : 'Connecting…';
+  $('connection').classList.toggle('live', live);
 }
 function setMode(next: 'watch' | 'agent' | 'manual') {
   releaseInputs();
-  if (next === 'manual') { send({ t: 'control.take' }); return; }
+  if (next === 'manual') { if (view === 'neo') send({ t: 'follow', enabled: false }); send({ t: 'control.take' }); return; }
   preference = next;
   try { localStorage.setItem('tandem.mode', next); } catch { /* Optional preference. */ }
   if (control.yours) send({ t: 'control.release' });
+  follow();
   if (next === 'watch' && activeId) selectTab(activeId, false);
   render();
 }
@@ -177,14 +226,15 @@ function receive(message: Message) {
     case 'welcome':
       control = message.control as Control;
       updateTabs(message.tabs as RemoteTab[], String(message.activeTargetId ?? ''));
-      if (viewedId) send({ t: 'view', targetId: viewedId });
+      if (view === 'lite' && viewedId) send({ t: 'view', targetId: viewedId });
+      follow();
       break;
     case 'tabs': updateTabs(message.tabs as RemoteTab[], String(message.activeTargetId ?? '')); break;
     case 'control':
       if (control.yours && !message.yours) { pressed.clear(); pendingMove = undefined; heldButtons.clear(); }
-      control = message as unknown as Control; render(); break;
+      control = message as unknown as Control; follow(); render(); break;
     case 'agent.activity':
-      if (mode() === 'watch' && typeof message.targetId === 'string' && tabs.some(t => t.targetId === message.targetId)) selectTab(message.targetId, false);
+      if (view === 'lite' && mode() === 'watch' && typeof message.targetId === 'string' && tabs.some(t => t.targetId === message.targetId)) selectTab(message.targetId, false);
       break;
     case 'dialog': dialog = message as unknown as RemoteDialog; renderDialog(); break;
     case 'dialog.closed': if (dialog?.targetId === message.targetId) { dialog = undefined; remoteDialog.close(); draw(); } break;
@@ -215,7 +265,7 @@ async function connect() {
       clearInterval(pingTimer); pingTimer = setInterval(() => send({ t: 'ping', ts: Date.now() }), 15000); render();
     };
     socket.onmessage = event => {
-      if (event.data instanceof ArrayBuffer) void receiveFrame(event.data);
+      if (event.data instanceof ArrayBuffer) { if (view === 'lite') void receiveFrame(event.data); }
       else { try { receive(JSON.parse(event.data)); } catch { notify('Received an invalid browser update.'); } }
     };
     socket.onclose = event => {
@@ -233,7 +283,7 @@ function scheduleReconnect() {
   reconnectTimer = setTimeout(() => void connect(), Math.min(30000, 700 * 2 ** reconnectAttempt++) + Math.random() * 300);
 }
 function renderDialog() {
-  if (!dialog) { if (remoteDialog.open) remoteDialog.close(); return; }
+  if (!dialog || view === 'neo') { if (remoteDialog.open) remoteDialog.close(); return; }
   const wasOpen = remoteDialog.open;
   $('dialog-title').textContent = dialog.type === 'beforeunload' ? 'Leave this page?' : dialog.type === 'prompt' ? 'This page needs a response' : 'This page says';
   $('dialog-message').textContent = dialog.message; $('prompt-label').hidden = dialog.type !== 'prompt';
@@ -297,8 +347,9 @@ async function logout() {
   if (!response.ok && response.status !== 401) throw new Error('Unable to log out. Please try again.');
   stopped = true; socket?.close(); location.assign('/login');
 }
-function openDesktop() { if (connected && control.yours) window.open('/desktop/', '_blank', 'noopener,noreferrer'); }
+function openDesktop() { if (view === 'neo') { neo?.focus(); return; } if (connected && control.yours) window.open('/desktop/', '_blank', 'noopener,noreferrer'); }
 async function command(command: string) {
+  if (view === 'neo' && await neo?.command(command)) return;
   const route = commandRoute(command, document.activeElement === address);
   if (route === 'address') return localEdit(command);
   if (route === 'remote') return remoteEdit(command);
@@ -395,10 +446,11 @@ $('new-tab').onclick = () => runCommand('new-tab'); $('back').onclick = () => ru
 $('reload').onclick = () => runCommand(tab()?.loading ? 'stop' : 'reload'); $('desktop-view').onclick = openDesktop;
 $('banner-action').onclick = () => setMode(control.yours ? preference : 'manual');
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-mode]')) button.onclick = () => setMode(button.dataset.mode as 'watch' | 'agent' | 'manual');
-$('menu-button').onclick = () => { const menu = $('menu'); menu.hidden = !menu.hidden; $('menu-button').setAttribute('aria-expanded', String(!menu.hidden)); if (!menu.hidden) $('show-audit').focus(); };
+$('menu-button').onclick = () => { const menu = $('menu'); menu.hidden = !menu.hidden; $('menu-button').setAttribute('aria-expanded', String(!menu.hidden)); if (!menu.hidden) $('switch-view').focus(); };
 function closeMenu() { $('menu').hidden = true; $('menu-button').setAttribute('aria-expanded', 'false'); }
 document.addEventListener('click', event => { if (!(event.target as HTMLElement).closest('.menu-wrap')) closeMenu(); });
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('menu').hidden) { closeMenu(); $('menu-button').focus(); } });
+$('switch-view').onclick = () => { closeMenu(); switchView(view === 'neo' ? 'lite' : 'neo'); };
 $('show-audit').onclick = () => { closeMenu(); runCommand('show-audit'); }; $('logout').onclick = () => runCommand('logout'); $('audit-close').onclick = () => auditDialog.close();
 $('dialog-form').addEventListener('submit', event => { event.preventDefault(); respondDialog(true); }); $('dialog-cancel').onclick = () => respondDialog(false);
 $('dialog-take-control').onclick = () => setMode('manual');
@@ -407,6 +459,9 @@ const unsubscribe = window.tandemDesktop?.onCommand(runCommand);
 if (window.tandemDesktop) { $('settings').hidden = false; $('settings').onclick = () => window.tandemDesktop!.openSettings(); }
 function resized() { draw(); clearTimeout(viewportTimer); viewportTimer = setTimeout(() => send({ t: 'viewport', ...viewport() }), 150); }
 new ResizeObserver(resized).observe(canvas); window.addEventListener('resize', resized);
-window.addEventListener('pagehide', () => { stopped = true; releaseInputs(); unsubscribe?.(); clearInterval(pingTimer); clearTimeout(reconnectTimer); socket?.close(); frame?.image.close(); });
-async function start() { try { brand = await loadBrand(); render(); draw(); await connect(); } catch (error) { notify(error instanceof Error ? error.message : 'Unable to start browser.'); } }
+window.addEventListener('pagehide', () => { stopped = true; send({ t: 'follow', enabled: false }); neo?.stop(); releaseInputs(); unsubscribe?.(); clearInterval(pingTimer); clearTimeout(reconnectTimer); socket?.close(); frame?.image.close(); });
+async function start() { try { brand = await loadBrand();
+  neo = new NeoView($('neo-window'), mac, brand.colors.background || '#FAF9F5', status => { neoStatus = status; renderConnection(); }, notify);
+  applyView(); render(); draw(); await connect(); } catch (error) { notify(error instanceof Error ? error.message : 'Unable to start browser.'); } }
+applyView();
 void start();

@@ -1,5 +1,6 @@
 import { PAUSED_TEXT, parseRpcText } from '../src/mcp';
 import { totp } from '../src/security';
+import { Cdp } from '../src/cdp';
 
 const base = process.env.TANDEM_URL?.replace(/\/$/, '');
 const origin = process.env.TANDEM_ORIGIN;
@@ -120,13 +121,61 @@ try {
     await until(() => messages.slice(mark).filter(m => m.t === 'tabs').flatMap(m => m.tabs).find((t: any) => t.targetId === targetId && t.url.startsWith('https://example.com') && t.canGoForward), 'back navigation'); assert(!messages.slice(mark).some(m => m.t === 'error'), 'back returned a command error');
     send({ t: 'nav.forward', targetId }); send({ t: 'nav.reload', targetId }); send({ t: 'nav.stop', targetId }); await syncBrowser();
   });
-  await check('desktop proxy files and RFB stream, closed on control release', async () => {
+  await check('desktop framebuffer without control; VNC pointer/key only with control; release keeps stream open', async () => {
     const page = await viewerFetch('/desktop/vnc.html'); assert(page.status === 200 && (await page.text()).includes('noVNC'), 'noVNC file not proxied');
+    await controlled('agent');
     const desktop = new WebSocket(base!.replace(/^http/, 'ws') + '/desktop/websockify', { headers: { cookie, origin: origin! }, protocols: ['binary'] } as any); desktop.binaryType = 'arraybuffer';
-    let banner = '', chunks = 0; desktop.onmessage = e => { chunks++; if (!banner) banner = typeof e.data === 'string' ? e.data : Buffer.from(e.data).toString(); };
-    const close = new Promise<number>(resolve => { desktop.onclose = e => resolve(e.code); });
-    await until(() => banner.startsWith('RFB '), 'RFB banner'); desktop.send(Buffer.from(banner)); await until(() => chunks >= 2, 'RFB reply after client handshake');
-    await controlled('agent'); assert(await close === 4403, 'desktop did not close after release'); await controlled('human');
+    const probe = new Cdp(process.env.TANDEM_TEST_CDP_URL ?? 'http://127.0.0.1:9110', () => false);
+    let pending = Buffer.alloc(0), closed: number | undefined;
+    desktop.onmessage = e => { pending = Buffer.concat([pending, Buffer.from(e.data)]); };
+    desktop.onclose = e => { closed = e.code; };
+    const read = async (size: number) => {
+      await until(() => { assert(closed === undefined, `desktop closed ${closed}`); return pending.length >= size; }, `RFB ${size} bytes`);
+      const value = pending.subarray(0, size); pending = pending.subarray(size); return value;
+    };
+    try {
+      const banner = await read(12); assert(banner.toString() === 'RFB 003.008\n', 'RFB version'); desktop.send(banner);
+      const count = (await read(1))[0]!; assert((await read(count)).includes(1), 'RFB None security unavailable');
+      desktop.send(Buffer.from([1])); assert((await read(4)).readUInt32BE(0) === 0, 'RFB security failed'); desktop.send(Buffer.from([1]));
+      const init = await read(24), width = init.readUInt16BE(0), height = init.readUInt16BE(2); await read(init.readUInt32BE(20));
+      assert(width > 0 && height > 0, 'invalid ServerInit');
+      const format = Buffer.alloc(20); format[4] = 32; format[5] = 24; format[7] = 1;
+      format.writeUInt16BE(255, 8); format.writeUInt16BE(255, 10); format.writeUInt16BE(255, 12); format[14] = 16; format[15] = 8;
+      desktop.send(format); desktop.send(Buffer.from([2, 0, 0, 1, 0, 0, 0, 0]));
+      const update = async () => {
+        desktop.send(Buffer.from([3, 0, 0, 0, 0, 0, 0, 1, 0, 1]));
+        const header = await read(4); assert(header[0] === 0 && header.readUInt16BE(2) > 0, 'missing framebuffer update');
+        let pixels = 0;
+        for (let i = 0; i < header.readUInt16BE(2); i++) {
+          const rect = await read(12); assert(rect.readInt32BE(8) === 0, 'expected raw framebuffer');
+          const size = rect.readUInt16BE(4) * rect.readUInt16BE(6) * 4; await read(size); pixels += size;
+        }
+        assert(pixels > 0, 'empty framebuffer update');
+      };
+      await update();
+      probe.start(); await until(() => probe.connected && probe.tabs.has(targetId), 'CDP input probe');
+      const inputTarget = [...probe.tabs.values()].find(tab => createdTabs.has(tab.targetId) && tab.url === 'about:blank')?.targetId; assert(inputTarget, 'missing foreground input fixture');
+      const evaluate = async (expression: string) => (await probe.page(inputTarget, 'Runtime.evaluate', { expression, returnByValue: true })).result.value;
+      await controlled('human');
+      await evaluate(`document.body.innerHTML = '<input id="vnc" style="position:fixed;inset:0;width:100vw;height:100vh">'; window.vncEvents = {mouse:0,key:0}; document.addEventListener('mousedown', () => window.vncEvents.mouse++); document.addEventListener('keydown', () => window.vncEvents.key++); document.querySelector('input').focus()`);
+      const reset = () => evaluate(`document.querySelector('input').value = ''; window.vncEvents = {mouse:0,key:0}; document.querySelector('input').focus()`);
+      const state = () => evaluate(`({value:document.querySelector('input').value, ...window.vncEvents})`);
+      const input = (key: string, shift: number) => {
+        const pointer = Buffer.from([5, 0, 0, 0, 0, 0]); pointer.writeUInt16BE(Math.floor(width * 0.7) + shift, 2); pointer.writeUInt16BE(Math.floor(height * 0.6), 4);
+        const down = Buffer.from(pointer); down[1] = 1;
+        const keydown = Buffer.from([4, 1, 0, 0, 0, 0, 0, key.charCodeAt(0)]), keyup = Buffer.from(keydown); keyup[1] = 0;
+        desktop.send(Buffer.concat([pointer, down, pointer, keydown, keyup]));
+      };
+      await controlled('agent'); await reset(); input('b', 0); await update(); await Bun.sleep(250);
+      assert(JSON.stringify(await state()) === JSON.stringify({ value: '', mouse: 0, key: 0 }), 'uncontrolled VNC input reached the page');
+      await controlled('human'); input('a', 1);
+      let typed: any;
+      for (let i = 0; i < 100; i++) { typed = await state(); if (typed.value === 'a' && typed.mouse > 0 && typed.key > 0) break; await Bun.sleep(20); }
+      assert(typed?.value === 'a' && typed.mouse > 0 && typed.key > 0, `controlled VNC input missing: ${JSON.stringify(typed)}`);
+      await controlled('agent'); await reset(); input('c', 2); await update(); await Bun.sleep(250);
+      const after = await state(); assert(after.value === '' && after.mouse === 0 && after.key === 0, 'VNC input passed after release');
+      assert(closed === undefined && desktop.readyState === WebSocket.OPEN, 'release closed the desktop'); await controlled('human');
+    } finally { desktop.close(); probe.close(); }
   });
   let tools: any[] = [];
   await check('MCP initialize and tools/list pass during manual control', async () => {

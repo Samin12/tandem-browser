@@ -5,3 +5,22 @@
 @media(max-width:1200px){.toolbar{flex-wrap:wrap;gap:8px}.toolbar-right{width:100%;justify-content:flex-end;gap:10px}.address-form{min-width:150px}.control-indicator{margin-right:auto}.tab{width:180px}.connection{min-width:auto}}
 @media(max-width:540px){.tab-row{padding-left:10px;padding-right:10px;gap:4px}.brand-mark{width:21px;height:21px;margin-right:0}.tab{min-width:138px}.connection{font-size:9px;padding-left:3px}.toolbar{padding:8px;gap:5px}.navigation .icon-button{width:28px}.toolbar-right{gap:6px;flex-wrap:wrap}.control-indicator{font-size:10px}.modes button{padding:4px 7px;font-size:10px}.desktop-button{width:28px;padding:0}.desktop-button span{display:none}.address-hint{display:none}.control-banner{font-size:10px;height:auto;min-height:35px;padding:4px;gap:3px}.control-banner button{font-size:10px;white-space:nowrap}.login-card{padding:28px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}.spinner{animation-duration:2s}}
+/* Neo owns the browser frame; Tandem only supplies its slim control bar. */
+.neo-bar{height:44px;display:flex;align-items:center;gap:12px;padding:0 12px;background:var(--background)}
+.neo-bar .brand-mark{width:23px;height:23px;margin:0;flex:none}
+.neo-bar .connection{padding:0;min-width:105px}
+.neo-bar .toolbar-right{width:auto;flex:1;min-width:0;justify-content:flex-end;gap:16px;flex-wrap:nowrap}
+.neo-bar .control-indicator{margin-right:auto;overflow:hidden;text-overflow:ellipsis}
+.neo-bar .desktop-button{display:none}
+.neo-bar .modes{padding:2px}
+.neo-bar .modes button{padding:3px 10px}
+.neo-view .tab-row,.neo-view .toolbar,.neo-view #page,.neo-view #empty{display:none}
+.neo-window{position:absolute;inset:0;overflow:hidden;background:var(--background)}
+.neo-window canvas{cursor:default}
+.neo-view .control-banner{height:27px;min-height:27px;padding:0 8px;font-size:10px}
+.neo-view .control-banner button{font-size:10px;padding:2px 6px}
+.neo-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:12px;background:var(--background);color:var(--text-muted);font-size:13px;pointer-events:none}
+.neo-loading .spinner{display:block;width:20px;height:20px}
+.notice button{margin-left:12px;padding:5px 8px;color:var(--agent);border-color:var(--border);white-space:nowrap}
+@media(max-width:700px){.neo-bar{gap:8px;padding:0 8px}.neo-bar .connection{min-width:0;font-size:9px}.neo-bar .toolbar-right{gap:5px}.neo-bar .control-indicator{font-size:10px}.neo-bar .modes button{padding:3px 6px;font-size:10px}}
+@media(max-width:480px){.neo-bar .control-indicator{display:none}.neo-bar .toolbar-right{margin-left:auto;flex:0}.neo-bar .brand-mark{width:20px;height:20px}.neo-bar .connection{flex:1}.neo-bar .menu{width:165px}}

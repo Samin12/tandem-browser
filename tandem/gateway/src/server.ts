@@ -10,16 +10,18 @@ import { Cdp } from './cdp';
 import { Screencasts } from './screencast';
 import { copySelection, inputCommand } from './input';
 import { McpProxy } from './mcp';
+import { RfbFilter, CUT_TEXT_LIMIT } from './rfb';
+import { Follow } from './follow';
 
 export const VERSION = '0.1.0';
-interface SocketData { kind: 'viewer' | 'desktop'; sessionId: string; hello: boolean; viewport: { w: number; h: number; dpr: number }; targetId?: string; upstream?: WebSocket; queue: Promise<void>; openedAt: number }
+interface SocketData { kind: 'viewer' | 'desktop'; sessionId: string; hello: boolean; viewport: { w: number; h: number; dpr: number }; targetId?: string; upstream?: WebSocket; rfb?: RfbFilter; queue: Promise<void>; openedAt: number }
 type Socket = ServerWebSocket<SocketData>;
 class NotInControl extends Error {}
 export function createGateway(config: Config) {
   const sessions = new Sessions(config), audit = new Audit(config.dataDir), control = new Control(config.dataDir, audit);
   const cdp = new Cdp(config.cdpUrl, () => control.controller === 'agent'), screencasts = new Screencasts(cdp);
   const mcp = new McpProxy(config, control, audit, cdp), limiter = new RateLimit();
-  const viewers = new Set<Socket>(), desktops = new Set<Socket>();
+  const viewers = new Set<Socket>(), desktops = new Set<Socket>(), follow = new Follow(cdp, control);
   const loginQueues = new Map<string, Promise<void>>();
   let brand: Record<string, unknown>;
   try { brand = JSON.parse(readFileSync(config.brandFile, 'utf8')); if (!brand || typeof brand !== 'object' || Array.isArray(brand)) throw 0; }
@@ -31,14 +33,14 @@ export function createGateway(config: Config) {
   const tabs = () => ({ t: 'tabs', tabs: [...cdp.tabs.values()], activeTargetId: cdp.activeTargetId ?? null });
   let tabsTimer: ReturnType<typeof setTimeout> | undefined;
   cdp.on('tabs', () => { if (!tabsTimer) tabsTimer = setTimeout(() => { tabsTimer = undefined; broadcast(tabs()); }, 25); });
-  cdp.on('activity', value => { broadcast(tabs()); broadcast({ ...value, tool: control.lastAgentTool?.name ?? value.tool }); });
+  cdp.on('activity', value => { follow.activity(value.targetId); broadcast(tabs()); broadcast({ ...value, tool: control.lastAgentTool?.name ?? value.tool }); });
   cdp.on('dialog', value => broadcast(value));
   control.onChange = () => {
     for (const ws of viewers) send(ws, { t: 'control', ...control.state(ws.data.sessionId) });
-    for (const ws of desktops) if (!control.holds(ws.data.sessionId)) ws.close(4403, 'Control released');
+    follow.changed();
   };
   sessions.onRevoke = id => {
-    for (const ws of [...viewers, ...desktops]) if (ws.data.sessionId === id) ws.close(4401, 'Session expired');
+    for (const ws of [...viewers, ...desktops]) if (ws.data.sessionId === id) { follow.set(ws, false); ws.close(4401, 'Session expired'); }
     control.release(id);
   };
   const fail = (error: string, status: number, extra: Record<string, unknown> = {}) => Response.json({ error, ...extra }, { status });
@@ -108,7 +110,6 @@ export function createGateway(config: Config) {
       if (!session) return fail('unauthorized', 401);
       if (req.method !== 'GET' || req.headers.get('upgrade')?.toLowerCase() !== 'websocket') return fail('upgrade_required', 426);
       const desktop = path === '/desktop/websockify';
-      if (desktop && !control.holds(session.id)) return fail('not_in_control', 403);
       const protocols = desktop ? (req.headers.get('sec-websocket-protocol') ?? '').split(',').map(s => s.trim()) : [];
       const headers = securityHeaders(path);
       if (protocols.includes('binary')) headers.set('sec-websocket-protocol', 'binary');
@@ -152,18 +153,18 @@ export function createGateway(config: Config) {
   async function message(ws: Socket, raw: string | Buffer) {
     if (!sessions.byId(ws.data.sessionId, true)) { ws.close(4401, 'Session expired'); return; }
     if (ws.data.kind === 'desktop') {
-      if (!control.holds(ws.data.sessionId)) { ws.close(4403, 'Control released'); return; }
-      if (ws.data.upstream?.readyState === WebSocket.OPEN) ws.data.upstream.send(raw);
-      else ws.close(1013, 'Desktop connecting');
+      if (typeof raw === 'string') { ws.close(4403, 'Expected RFB bytes'); return; }
+      ws.data.rfb!.push(raw);
       return;
     }
-    if (typeof raw !== 'string') { ws.close(4403, 'Expected JSON'); return; }
+    if (typeof raw !== 'string' || Buffer.byteLength(raw) > 1024 * 1024) { ws.close(4403, 'Expected JSON'); return; }
     let m: any;
     try { m = JSON.parse(raw); } catch { ws.close(4403, 'Invalid JSON'); return; }
     if (!m || typeof m !== 'object' || Array.isArray(m) || typeof m.t !== 'string') { ws.close(4403, 'Invalid message'); return; }
     if (!ws.data.hello && m.t !== 'hello') { ws.close(4403, 'hello required'); return; }
     try {
       if (m.t === 'hello') { if (ws.data.hello) throw new Error('Duplicate hello'); ws.data.viewport = viewport(m.viewport); ws.data.hello = true; return; }
+      if (m.t === 'follow') { if (typeof m.enabled !== 'boolean') throw new Error('Invalid follow'); follow.set(ws, m.enabled); return; }
       if (m.t === 'viewport') { ws.data.viewport = viewport(m); screencasts.viewport(ws, ws.data.viewport); return; }
       if (m.t === 'ping') { send(ws, { t: 'pong', ts: m.ts, serverTs: Date.now() }); return; }
       if (m.t === 'control.take') { control.take(ws.data.sessionId); return; }
@@ -207,7 +208,7 @@ export function createGateway(config: Config) {
       catch { log('request.failed', { method: req.method }); return secureResponse(path, fail('internal_error', 500)); }
     },
     websocket: {
-      maxPayloadLength: 1024 * 1024, idleTimeout: 120, backpressureLimit: 4 * 1024 * 1024, closeOnBackpressureLimit: false,
+      maxPayloadLength: CUT_TEXT_LIMIT, idleTimeout: 120, backpressureLimit: 4 * 1024 * 1024, closeOnBackpressureLimit: false,
       open(ws) {
         control.connected(ws.data.sessionId);
         if (ws.data.kind === 'viewer') {
@@ -217,8 +218,14 @@ export function createGateway(config: Config) {
           desktops.add(ws); audit.write('human', 'desktop.open', {}, { sessionId: ws.data.sessionId });
           const target = new URL('/websockify', config.novncUrl); target.protocol = target.protocol === 'https:' ? 'wss:' : 'ws:';
           const upstream = new WebSocket(target, ['binary']); ws.data.upstream = upstream; upstream.binaryType = 'arraybuffer';
+          ws.data.rfb = new RfbFilter(() => control.holds(ws.data.sessionId), bytes => {
+            if (upstream.readyState !== WebSocket.OPEN) { ws.close(1013, 'Desktop connecting'); return; }
+            if (upstream.bufferedAmount > 2 * 1024 * 1024) { ws.close(1013, 'Desktop backpressure'); return; }
+            upstream.send(bytes);
+          }, (reason, type) => { log('desktop.protocol_violation', { reason, type: type ?? -1 }); ws.close(4403, reason); });
           upstream.onmessage = event => {
-            if (!control.holds(ws.data.sessionId) || !sessions.byId(ws.data.sessionId)) { ws.close(4403, 'Control released'); return; }
+            if (!sessions.byId(ws.data.sessionId)) { ws.close(4401, 'Session expired'); return; }
+            if (ws.readyState !== 1) return;
             if (ws.getBufferedAmount() > 2 * 1024 * 1024) { ws.close(1013, 'Desktop backpressure'); return; }
             if (typeof event.data === 'string') ws.send(event.data); else ws.send(new Uint8Array(event.data));
           };
@@ -227,6 +234,7 @@ export function createGateway(config: Config) {
         }
       },
       message(ws, data) {
+        if (ws.data.kind === 'desktop') { void message(ws, data).catch(() => ws.close(4403, 'Protocol violation')); return; }
         // Control transitions must not wait behind an outstanding browser command.
         if (ws.data.kind === 'viewer' && typeof data === 'string') {
           try {
@@ -236,7 +244,7 @@ export function createGateway(config: Config) {
         }
         ws.data.queue = ws.data.queue.then(() => message(ws, data)).catch(() => ws.close(4403, 'Protocol violation'));
       },
-      close(ws) { viewers.delete(ws); desktops.delete(ws); screencasts.unsubscribe(ws); ws.data.upstream?.close(); control.disconnected(ws.data.sessionId); },
+      close(ws) { follow.set(ws, false); viewers.delete(ws); desktops.delete(ws); screencasts.unsubscribe(ws); ws.data.upstream?.close(); control.disconnected(ws.data.sessionId); },
     },
   });
   const timer = setInterval(() => {
@@ -248,7 +256,7 @@ export function createGateway(config: Config) {
   }, 1000);
   cdp.start(); mcp.start(); log('gateway.started', { port: server.port! });
   return { server, sessions, control, cdp, mcp, audit, async close() {
-    clearInterval(timer); clearTimeout(tabsTimer); mcp.close(); screencasts.close(); cdp.close();
+    clearInterval(timer); clearTimeout(tabsTimer); follow.close(); mcp.close(); screencasts.close(); cdp.close();
     for (const ws of [...viewers, ...desktops]) ws.terminate();
     // Bun 1.3 can leave stop() pending after a completed WebSocket close handshake.
     void server.stop(true); server.unref(); control.close(); sessions.close(); audit.close();
