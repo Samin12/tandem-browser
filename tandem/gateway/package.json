@@ -1,0 +1,16 @@
+{
+  "name": "@tandem/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun src/index.ts",
+    "dev": "bun --watch src/index.ts",
+    "test": "bun test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "e2e": "bun test/e2e.ts",
+    "hash-password": "bun scripts/hash-password.ts",
+    "gen-secret": "bun scripts/gen-secret.ts"
+  },
+  "devDependencies": { "@types/bun": "^1.3.0", "typescript": "^5.9.3" }
+}

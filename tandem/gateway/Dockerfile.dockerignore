@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/release
+**/.DS_Store
+**/._*
+desktop
+deploy
+docs
+scripts
+gateway/test
+gateway/README.md

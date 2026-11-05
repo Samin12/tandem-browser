@@ -1,0 +1,256 @@
+import type { Server, ServerWebSocket } from 'bun';
+import { realpathSync, readFileSync, statSync } from 'node:fs';
+import { resolve, sep } from 'node:path';
+import type { Config } from './config';
+import { Sessions, sessionCookie, type Session } from './auth';
+import { Audit, log } from './audit';
+import { checkOrigin, clientIp, constantEqual, RateLimit, securityHeaders, verifyTotp } from './security';
+import { Control } from './control';
+import { Cdp } from './cdp';
+import { Screencasts } from './screencast';
+import { copySelection, inputCommand } from './input';
+import { McpProxy } from './mcp';
+
+export const VERSION = '0.1.0';
+interface SocketData { kind: 'viewer' | 'desktop'; sessionId: string; hello: boolean; viewport: { w: number; h: number; dpr: number }; targetId?: string; upstream?: WebSocket; queue: Promise<void>; openedAt: number }
+type Socket = ServerWebSocket<SocketData>;
+class NotInControl extends Error {}
+export function createGateway(config: Config) {
+  const sessions = new Sessions(config), audit = new Audit(config.dataDir), control = new Control(config.dataDir, audit);
+  const cdp = new Cdp(config.cdpUrl, () => control.controller === 'agent'), screencasts = new Screencasts(cdp);
+  const mcp = new McpProxy(config, control, audit, cdp), limiter = new RateLimit();
+  const viewers = new Set<Socket>(), desktops = new Set<Socket>();
+  const loginQueues = new Map<string, Promise<void>>();
+  let brand: Record<string, unknown>;
+  try { brand = JSON.parse(readFileSync(config.brandFile, 'utf8')); if (!brand || typeof brand !== 'object' || Array.isArray(brand)) throw 0; }
+  catch { throw new Error('TANDEM_BRAND_FILE: a readable JSON object is required'); }
+  let publicRoot: string;
+  try { publicRoot = realpathSync(config.publicDir); if (!statSync(publicRoot).isDirectory()) throw 0; } catch { throw new Error('TANDEM_PUBLIC_DIR: a readable directory is required'); }
+  const send = (ws: Socket, value: unknown) => { if (ws.readyState === 1) ws.send(JSON.stringify(value)); };
+  const broadcast = (value: unknown) => { for (const ws of viewers) send(ws, value); };
+  const tabs = () => ({ t: 'tabs', tabs: [...cdp.tabs.values()], activeTargetId: cdp.activeTargetId ?? null });
+  let tabsTimer: ReturnType<typeof setTimeout> | undefined;
+  cdp.on('tabs', () => { if (!tabsTimer) tabsTimer = setTimeout(() => { tabsTimer = undefined; broadcast(tabs()); }, 25); });
+  cdp.on('activity', value => { broadcast(tabs()); broadcast({ ...value, tool: control.lastAgentTool?.name ?? value.tool }); });
+  cdp.on('dialog', value => broadcast(value));
+  control.onChange = () => {
+    for (const ws of viewers) send(ws, { t: 'control', ...control.state(ws.data.sessionId) });
+    for (const ws of desktops) if (!control.holds(ws.data.sessionId)) ws.close(4403, 'Control released');
+  };
+  sessions.onRevoke = id => {
+    for (const ws of [...viewers, ...desktops]) if (ws.data.sessionId === id) ws.close(4401, 'Session expired');
+    control.release(id);
+  };
+  const fail = (error: string, status: number, extra: Record<string, unknown> = {}) => Response.json({ error, ...extra }, { status });
+  const secureResponse = (path: string, response: Response) => {
+    const headers = new Headers(response.headers);
+    for (const [key, value] of securityHeaders(path)) headers.set(key, value);
+    return new Response(response.body, { status: response.status, headers });
+  };
+  const requireSession = (req: Request) => req.headers.has('authorization') ? null : sessions.fromRequest(req);
+  async function staticFile(path: string, session: Session | null) {
+    const publicRoute = path === '/login' || path === '/login.html' || path.startsWith('/assets/') || path === '/favicon.svg';
+    if (!publicRoute && !session) return Response.redirect(`${config.origins[0]}/login`, 302);
+    let decoded: string;
+    try { decoded = decodeURIComponent(path); } catch { return fail('invalid_path', 400); }
+    if (decoded.includes('\0') || decoded.includes('\\')) return fail('invalid_path', 400);
+    const root = publicRoot;
+    const requested = path === '/login' ? 'login.html' : path === '/' ? 'index.html' : decoded.replace(/^\/+/, '');
+    let filePath = resolve(root, requested);
+    if (!filePath.startsWith(root + sep) || (path.startsWith('/assets/') && !filePath.startsWith(resolve(root, 'assets') + sep))) return fail('not_found', 404);
+    let file = Bun.file(filePath);
+    if (!await file.exists()) {
+      if (publicRoute || path.includes('.')) return fail('not_found', 404);
+      filePath = resolve(root, 'index.html'); file = Bun.file(filePath);
+    }
+    try { const actual = realpathSync(filePath); if (!actual.startsWith(root + sep) || (path.startsWith('/assets/') && !actual.startsWith(resolve(root, 'assets') + sep))) return fail('not_found', 404); } catch { return fail('not_found', 404); }
+    return new Response(file);
+  }
+  async function route(req: Request, server: Server<SocketData>): Promise<Response | undefined> {
+    const url = new URL(req.url), path = url.pathname;
+    if (path === '/mcp') {
+      const header = req.headers.get('authorization') ?? '';
+      if (!header.startsWith('Bearer ') || !constantEqual(header.slice(7), config.agentToken)) return fail('unauthorized', 401);
+      server.timeout(req, 0);
+      return mcp.handle(req);
+    }
+    if (!checkOrigin(req, config.origins, path === '/ws' || path === '/desktop/websockify')) return fail('forbidden_origin', 403);
+    if (path === '/api/health' && req.method === 'GET') return Response.json({ ok: cdp.connected && mcp.healthy, cdp: cdp.connected, mcp: mcp.healthy, version: VERSION });
+    // A bearer credential is intentionally never a viewer credential, even alongside a cookie.
+    if (req.headers.has('authorization')) return fail('unauthorized', 401);
+    if (path === '/api/auth-config' && req.method === 'GET') return Response.json({ totp: !!config.totpSecret, productName: brand.productName ?? 'Tandem Browser' });
+    if (path === '/api/login' && req.method === 'POST') {
+      if (!req.headers.get('content-type')?.startsWith('application/json')) return fail('json_required', 415);
+      const ip = clientIp(req, server.requestIP(req)?.address ?? 'unknown');
+      let body: any;
+      try { body = await req.json(); } catch { return fail('invalid_json', 400); }
+      const previous = loginQueues.get(ip) ?? Promise.resolve();
+      const result = previous.then(async () => {
+        const retryAfter = limiter.retryAfter(ip);
+        if (retryAfter) { const response = fail('rate_limited', 429, { retryAfter }); response.headers.set('retry-after', String(retryAfter)); return response; }
+        const password = typeof body?.password === 'string' && body.password.length <= 10000 ? body.password : '';
+        const passwordOk = await Bun.password.verify(password, config.passwordHash);
+        const totpOk = !config.totpSecret || verifyTotp(config.totpSecret, body?.totp);
+        if (!passwordOk || !totpOk) { limiter.fail(ip); audit.write('human', 'login.fail', {}, { ip }); return fail('invalid_credentials', 401); }
+        limiter.clear(ip);
+        const { token, session } = sessions.create();
+        audit.write('human', 'login.ok', {}, { ip, sessionId: session.id });
+        return Response.json({ ok: true }, { headers: { 'set-cookie': sessionCookie(token, config, req.headers.get('origin')!) } });
+      });
+      const settled = result.then(() => {}, () => {});
+      loginQueues.set(ip, settled);
+      try { return await result; }
+      finally { if (loginQueues.get(ip) === settled) loginQueues.delete(ip); }
+    }
+    if (path === '/brand.json' && req.method === 'GET') return Response.json(brand);
+    const session = requireSession(req);
+    if (path === '/ws' || path === '/desktop/websockify') {
+      if (!session) return fail('unauthorized', 401);
+      if (req.method !== 'GET' || req.headers.get('upgrade')?.toLowerCase() !== 'websocket') return fail('upgrade_required', 426);
+      const desktop = path === '/desktop/websockify';
+      if (desktop && !control.holds(session.id)) return fail('not_in_control', 403);
+      const protocols = desktop ? (req.headers.get('sec-websocket-protocol') ?? '').split(',').map(s => s.trim()) : [];
+      const headers = securityHeaders(path);
+      if (protocols.includes('binary')) headers.set('sec-websocket-protocol', 'binary');
+      if (server.upgrade(req, { headers, data: { kind: desktop ? 'desktop' : 'viewer', sessionId: session.id, hello: false,
+        viewport: { w: 1600, h: 1000, dpr: 1 }, queue: Promise.resolve(), openedAt: Date.now() } })) return undefined;
+      return fail('upgrade_failed', 400);
+    }
+    if (path.startsWith('/api/')) {
+      if (!session) return fail('unauthorized', 401);
+      if (path === '/api/me' && req.method === 'GET') return Response.json({ user: 'owner', sessionId: session.id, expiresAt: session.expiresAt, totp: !!config.totpSecret });
+      if (path === '/api/audit' && req.method === 'GET') return Response.json(audit.tail(Number(url.searchParams.get('limit')) || 200));
+      if (path === '/api/logout' && req.method === 'POST') {
+        sessions.revoke(session.id); audit.write('human', 'logout', {}, { sessionId: session.id });
+        return Response.json({ ok: true }, { headers: { 'set-cookie': sessionCookie('', config, req.headers.get('origin')!, true) } });
+      }
+      return fail('not_found', 404);
+    }
+    if (path.startsWith('/desktop/')) {
+      if (!session) return fail('unauthorized', 401);
+      if (req.method !== 'GET') return fail('method_not_allowed', 405);
+      if (path === '/desktop/') return new Response(null, { status: 302, headers: { location: '/desktop/vnc.html?path=desktop/websockify&autoconnect=1&resize=remote&reconnect=1' } });
+      const target = new URL(config.novncUrl); target.pathname = path.slice('/desktop'.length); target.search = url.search;
+      try {
+        const upstream = await fetch(target, { headers: { accept: req.headers.get('accept') ?? '*/*' }, redirect: 'manual', signal: AbortSignal.timeout(10000) });
+        const headers = new Headers();
+        for (const name of ['content-type']) { const value = upstream.headers.get(name); if (value) headers.set(name, value); }
+        if (upstream.headers.has('location')) {
+          const location = new URL(upstream.headers.get('location')!, target);
+          if (location.origin === target.origin) headers.set('location', `/desktop${location.pathname}${location.search}`);
+        }
+        return new Response(upstream.body, { status: upstream.status, headers });
+      } catch { return fail('desktop_unavailable', 502); }
+    }
+    if (req.method !== 'GET') return fail('method_not_allowed', 405);
+    return staticFile(path, session);
+  }
+  function viewport(m: any) {
+    if (![m.w, m.h, m.dpr].every(v => typeof v === 'number' && Number.isFinite(v) && v > 0) || m.w > 10000 || m.h > 10000 || m.dpr > 8) throw new Error('Invalid viewport');
+    return { w: m.w as number, h: m.h as number, dpr: m.dpr as number };
+  }
+  async function message(ws: Socket, raw: string | Buffer) {
+    if (!sessions.byId(ws.data.sessionId, true)) { ws.close(4401, 'Session expired'); return; }
+    if (ws.data.kind === 'desktop') {
+      if (!control.holds(ws.data.sessionId)) { ws.close(4403, 'Control released'); return; }
+      if (ws.data.upstream?.readyState === WebSocket.OPEN) ws.data.upstream.send(raw);
+      else ws.close(1013, 'Desktop connecting');
+      return;
+    }
+    if (typeof raw !== 'string') { ws.close(4403, 'Expected JSON'); return; }
+    let m: any;
+    try { m = JSON.parse(raw); } catch { ws.close(4403, 'Invalid JSON'); return; }
+    if (!m || typeof m !== 'object' || Array.isArray(m) || typeof m.t !== 'string') { ws.close(4403, 'Invalid message'); return; }
+    if (!ws.data.hello && m.t !== 'hello') { ws.close(4403, 'hello required'); return; }
+    try {
+      if (m.t === 'hello') { if (ws.data.hello) throw new Error('Duplicate hello'); ws.data.viewport = viewport(m.viewport); ws.data.hello = true; return; }
+      if (m.t === 'viewport') { ws.data.viewport = viewport(m); screencasts.viewport(ws, ws.data.viewport); return; }
+      if (m.t === 'ping') { send(ws, { t: 'pong', ts: m.ts, serverTs: Date.now() }); return; }
+      if (m.t === 'control.take') { control.take(ws.data.sessionId); return; }
+      if (m.t === 'view') { if (typeof m.targetId !== 'string') throw new Error('Invalid target'); screencasts.subscribe(m.targetId, ws, ws.data.viewport); ws.data.targetId = m.targetId; return; }
+      const commands = ['control.release', 'tab.new', 'tab.close', 'tab.activate', 'nav.go', 'nav.back', 'nav.forward', 'nav.reload', 'nav.stop', 'input.mouse', 'input.key', 'input.text', 'clipboard.copy', 'dialog.respond'];
+      if (!commands.includes(m.t)) { ws.close(4403, 'Unknown command'); return; }
+      if (!control.holds(ws.data.sessionId)) { send(ws, { t: 'error', code: 'not_in_control', message: 'Take manual control to interact with the browser', reqId: m.reqId }); return; }
+      if (m.t === 'control.release') { control.release(ws.data.sessionId); return; }
+      const guard = () => { if (!control.holds(ws.data.sessionId) || !sessions.byId(ws.data.sessionId)) throw new NotInControl(); };
+      const humanPage = (targetId: string, method: string, params: Record<string, unknown> = {}) => cdp.page(targetId, method, params, guard);
+      const context = { sessionId: ws.data.sessionId };
+      if (m.t === 'tab.new') {
+        if (m.url !== undefined && typeof m.url !== 'string') throw new Error('Invalid URL');
+        const { targetId, url } = await cdp.newTab(m.url, guard);
+        audit.write('human', 'tab.new', { targetId, origin: url }, context); return;
+      }
+      if (typeof m.targetId !== 'string' || !cdp.tabs.has(m.targetId)) throw new Error('Unknown tab');
+      if (m.t === 'tab.close') { await cdp.send('Target.closeTarget', { targetId: m.targetId }); audit.write('human', m.t, { targetId: m.targetId }, context); }
+      else if (m.t === 'tab.activate') { await cdp.activate(m.targetId, guard); screencasts.subscribe(m.targetId, ws, ws.data.viewport); ws.data.targetId = m.targetId; audit.write('human', m.t, { targetId: m.targetId }, context); }
+      else if (m.t === 'nav.go') { if (typeof m.url !== 'string') throw new Error('Invalid URL'); const url = await cdp.navigate(m.targetId, m.url, guard); audit.write('human', m.t, { targetId: m.targetId, origin: url }, context); }
+      else if (m.t === 'nav.back' || m.t === 'nav.forward') await cdp.moveHistory(m.targetId, m.t === 'nav.back' ? -1 : 1, guard);
+      else if (m.t === 'nav.reload') await humanPage(m.targetId, 'Page.reload');
+      else if (m.t === 'nav.stop') await humanPage(m.targetId, 'Page.stopLoading');
+      else if (m.t.startsWith('input.')) { const { method, params } = inputCommand(m); await humanPage(m.targetId, method, params); }
+      else if (m.t === 'clipboard.copy') {
+        if (typeof m.reqId !== 'string' || m.reqId.length > 200) throw new Error('Invalid request ID');
+        send(ws, { t: 'clipboard', reqId: m.reqId, text: await copySelection(cdp, m.targetId) });
+      } else if (m.t === 'dialog.respond') {
+        if (typeof m.accept !== 'boolean' || (m.promptText !== undefined && (typeof m.promptText !== 'string' || m.promptText.length > 100000))) throw new Error('Invalid dialog response');
+        await humanPage(m.targetId, 'Page.handleJavaScriptDialog', { accept: m.accept, ...(m.promptText !== undefined ? { promptText: m.promptText } : {}) });
+      }
+    } catch (error) {
+      send(ws, { t: 'error', code: error instanceof NotInControl ? 'not_in_control' : 'command_failed', message: 'Invalid command or browser unavailable', reqId: typeof m.reqId === 'string' ? m.reqId : undefined });
+    }
+  }
+  const server = Bun.serve<SocketData>({
+    hostname: config.hostname, port: config.port, maxRequestBodySize: 2 * 1024 * 1024, idleTimeout: 255,
+    fetch: async (req, srv) => {
+      const path = new URL(req.url).pathname;
+      try { const response = await route(req, srv); return response ? secureResponse(path, response) : undefined; }
+      catch { log('request.failed', { method: req.method }); return secureResponse(path, fail('internal_error', 500)); }
+    },
+    websocket: {
+      maxPayloadLength: 1024 * 1024, idleTimeout: 120, backpressureLimit: 4 * 1024 * 1024, closeOnBackpressureLimit: false,
+      open(ws) {
+        control.connected(ws.data.sessionId);
+        if (ws.data.kind === 'viewer') {
+          viewers.add(ws);
+          send(ws, { t: 'welcome', sessionId: ws.data.sessionId, brand, control: control.state(ws.data.sessionId), tabs: [...cdp.tabs.values()], activeTargetId: cdp.activeTargetId ?? null, serverVersion: VERSION });
+        } else {
+          desktops.add(ws); audit.write('human', 'desktop.open', {}, { sessionId: ws.data.sessionId });
+          const target = new URL('/websockify', config.novncUrl); target.protocol = target.protocol === 'https:' ? 'wss:' : 'ws:';
+          const upstream = new WebSocket(target, ['binary']); ws.data.upstream = upstream; upstream.binaryType = 'arraybuffer';
+          upstream.onmessage = event => {
+            if (!control.holds(ws.data.sessionId) || !sessions.byId(ws.data.sessionId)) { ws.close(4403, 'Control released'); return; }
+            if (ws.getBufferedAmount() > 2 * 1024 * 1024) { ws.close(1013, 'Desktop backpressure'); return; }
+            if (typeof event.data === 'string') ws.send(event.data); else ws.send(new Uint8Array(event.data));
+          };
+          upstream.onerror = () => ws.close(1011, 'Desktop unavailable');
+          upstream.onclose = () => ws.close(1000, 'Desktop closed');
+        }
+      },
+      message(ws, data) {
+        // Control transitions must not wait behind an outstanding browser command.
+        if (ws.data.kind === 'viewer' && typeof data === 'string') {
+          try {
+            const m = JSON.parse(data);
+            if (ws.data.hello && (m?.t === 'control.take' || m?.t === 'control.release')) { void message(ws, data); return; }
+          } catch {}
+        }
+        ws.data.queue = ws.data.queue.then(() => message(ws, data)).catch(() => ws.close(4403, 'Protocol violation'));
+      },
+      close(ws) { viewers.delete(ws); desktops.delete(ws); screencasts.unsubscribe(ws); ws.data.upstream?.close(); control.disconnected(ws.data.sessionId); },
+    },
+  });
+  const timer = setInterval(() => {
+    sessions.sweep(); limiter.sweep();
+    for (const ws of [...viewers, ...desktops]) {
+      if (!sessions.byId(ws.data.sessionId)) ws.close(4401, 'Session expired');
+      else if (ws.data.kind === 'viewer' && !ws.data.hello && Date.now() - ws.data.openedAt > 10000) ws.close(4403, 'hello required');
+    }
+  }, 1000);
+  cdp.start(); mcp.start(); log('gateway.started', { port: server.port! });
+  return { server, sessions, control, cdp, mcp, audit, async close() {
+    clearInterval(timer); clearTimeout(tabsTimer); mcp.close(); screencasts.close(); cdp.close();
+    for (const ws of [...viewers, ...desktops]) ws.terminate();
+    // Bun 1.3 can leave stop() pending after a completed WebSocket close handshake.
+    void server.stop(true); server.unref(); control.close(); sessions.close(); audit.close();
+  } };
+}
