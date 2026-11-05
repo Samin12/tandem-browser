@@ -1,0 +1,106 @@
+time="2026-11-05T16:57:41-05:00" level=warning msg="buildx Docker CLI plugin not found: falling back to the classic builder. BuildKit-only build features (multi-arch, secrets, ssh, additional contexts, ...) will not be available"
+ Image twebneko-gateway Building 
+ Image twebneko-gateway Building 
+Sending build context to Docker daemon  524.5kBSending build context to Docker daemon  3.671MBSending build context to Docker daemon  5.245MBSending build context to Docker daemon  7.867MBSending build context to Docker daemon  11.01MBSending build context to Docker daemon  15.23MBSending build context to Docker daemon  17.33MBSending build context to Docker daemon  18.38MBSending build context to Docker daemon  19.43MBSending build context to Docker daemon  20.48MBSending build context to Docker daemon  22.58MBSending build context to Docker daemon  25.72MBSending build context to Docker daemon  28.34MBSending build context to Docker daemon  30.44MBSending build context to Docker daemon  31.49MBSending build context to Docker daemon  32.02MBSending build context to Docker daemon  33.06MBSending build context to Docker daemon  35.16MBSending build context to Docker daemon  36.21MBSending build context to Docker daemon  36.74MBSending build context to Docker daemon  37.78MBSending build context to Docker daemon  50.37MBSending build context to Docker daemon  72.92MBSending build context to Docker daemon  94.94MBSending build context to Docker daemon  116.5MBSending build context to Docker daemon  139.1MBSending build context to Docker daemon  159.6MBSending build context to Docker daemon  181.1MBSending build context to Docker daemon    201MBSending build context to Docker daemon    222MBSending build context to Docker daemon    243MBSending build context to Docker daemon  265.1MBSending build context to Docker daemon  287.7MBSending build context to Docker daemon  309.2MBSending build context to Docker daemon  332.2MBSending build context to Docker daemon  354.8MBSending build context to Docker daemon  375.9MBSending build context to Docker daemon  397.5MBSending build context to Docker daemon  419.5MBSending build context to Docker daemon    441MBSending build context to Docker daemon  463.6MBSending build context to Docker daemon  486.1MBSending build context to Docker daemon  507.6MBSending build context to Docker daemon  523.9MBSending build context to Docker daemon  527.6MBSending build context to Docker daemon  531.2MBSending build context to Docker daemon  534.4MBSending build context to Docker daemon  537.5MBSending build context to Docker daemon  540.7MBSending build context to Docker daemon  543.8MBSending build context to Docker daemon    547MBSending build context to Docker daemon  550.1MBSending build context to Docker daemon  553.3MBSending build context to Docker daemon  556.4MBSending build context to Docker daemon  559.6MBSending build context to Docker daemon  562.7MBSending build context to Docker daemon  565.9MBSending build context to Docker daemon    569MBSending build context to Docker daemon  572.1MBSending build context to Docker daemon  575.3MBSending build context to Docker daemon  578.4MBSending build context to Docker daemon  581.6MBSending build context to Docker daemon  585.3MBSending build context to Docker daemon  588.4MBSending build context to Docker daemon  591.6MBSending build context to Docker daemon  595.2MBSending build context to Docker daemon  598.4MBSending build context to Docker daemon    601MBSending build context to Docker daemon  603.6MBSending build context to Docker daemon  606.2MBSending build context to Docker daemon  608.9MBSending build context to Docker daemon  613.1MBSending build context to Docker daemon  616.7MBSending build context to Docker daemon  619.4MBSending build context to Docker daemon    622MBSending build context to Docker daemon  624.6MBSending build context to Docker daemon  627.2MBSending build context to Docker daemon  630.9MBSending build context to Docker daemon  634.1MBSending build context to Docker daemon  637.2MBSending build context to Docker daemon    651MBSending build context to Docker daemon  653.6MBSending build context to Docker daemon  656.8MBSending build context to Docker daemon  659.9MBSending build context to Docker daemon  663.1MBSending build context to Docker daemon  666.2MBSending build context to Docker daemon  669.9MBSending build context to Docker daemon    673MBSending build context to Docker daemon  676.2MBSending build context to Docker daemon  679.3MBSending build context to Docker daemon  682.5MBSending build context to Docker daemon  685.6MBSending build context to Docker daemon  688.8MBSending build context to Docker daemon  691.9MBSending build context to Docker daemon    695MBSending build context to Docker daemon  698.2MBSending build context to Docker daemon  701.3MBSending build context to Docker daemon    705MBSending build context to Docker daemon  708.2MBSending build context to Docker daemon  711.3MBSending build context to Docker daemon  714.5MBSending build context to Docker daemon  717.6MBSending build context to Docker daemon  720.7MBSending build context to Docker daemon  723.9MBSending build context to Docker daemon    727MBSending build context to Docker daemon  730.7MBSending build context to Docker daemon  734.9MBSending build context to Docker daemon  738.6MBSending build context to Docker daemon  741.2MBSending build context to Docker daemon  744.4MBSending build context to Docker daemon  749.1MBSending build context to Docker daemon  752.8MBSending build context to Docker daemon    756MBSending build context to Docker daemon  759.1MBSending build context to Docker daemon  762.3MBSending build context to Docker daemon  771.3MBSending build context to Docker daemon  777.6MBSending build context to Docker daemon  781.3MBSending build context to Docker daemon  781.9MBSending build context to Docker daemon  782.4MBSending build context to Docker daemon    784MBSending build context to Docker daemon  785.5MBSending build context to Docker daemon  787.6MBSending build context to Docker daemon    794MBSending build context to Docker daemon  794.5MBSending build context to Docker daemon  796.6MBSending build context to Docker daemon  799.3MBSending build context to Docker daemon  799.6MB
+Step 1/25 : FROM oven/bun:1 AS web
+ ---> 1d22548f177f
+Step 2/25 : WORKDIR /build/web
+ ---> Using cache
+ ---> 5d85853a8856
+Step 3/25 : COPY web/package.json web/bun.lock ./
+ ---> Using cache
+ ---> a2da87acdb96
+Step 4/25 : RUN bun install --frozen-lockfile
+ ---> Using cache
+ ---> 4fb87f3027ec
+Step 5/25 : COPY web/ ./
+ ---> 450849b0a26a
+Step 6/25 : COPY branding/ /build/branding/
+ ---> 1da803223b1d
+Step 7/25 : RUN bun run build
+ ---> Running in 085395c1192e
+[91m$ bun build.ts
+[0mBuilt dist/
+ ---> Removed intermediate container 085395c1192e
+ ---> 7383e6a62442
+Step 8/25 : FROM oven/bun:1 AS gateway
+ ---> 1d22548f177f
+Step 9/25 : WORKDIR /build/gateway
+ ---> Using cache
+ ---> b0d961baf6ce
+Step 10/25 : COPY gateway/package.json gateway/bun.lock ./
+ ---> Using cache
+ ---> 7db1d7f003e9
+Step 11/25 : RUN bun install --frozen-lockfile --production
+ ---> Using cache
+ ---> 99bc1c44dc30
+Step 12/25 : COPY gateway/src ./src
+ ---> Using cache
+ ---> 44acb3d94b27
+Step 13/25 : FROM oven/bun:1-slim
+ ---> 1846adf22496
+Step 14/25 : WORKDIR /app
+ ---> Using cache
+ ---> ebfc47056dde
+Step 15/25 : RUN groupadd --gid 10001 tandem && useradd --uid 10001 --gid 10001 --no-create-home tandem && mkdir -p /var/lib/tandem && chown 10001:10001 /var/lib/tandem
+ ---> Using cache
+ ---> 47ffa66d0fda
+Step 16/25 : COPY --from=gateway --chown=10001:10001 /build/gateway /app
+ ---> Using cache
+ ---> 7b0bbac7fa9c
+Step 17/25 : COPY --from=web --chown=10001:10001 /build/web/dist /app/public
+ ---> c896d77257df
+Step 18/25 : COPY --chown=10001:10001 branding/brand.json /app/brand.json
+ ---> 7c3063decc53
+Step 19/25 : COPY --chown=10001:10001 branding/logo.svg /app/public/favicon.svg
+ ---> b5b9b4a6fda6
+Step 20/25 : ENV TANDEM_DATA_DIR=/var/lib/tandem TANDEM_PUBLIC_DIR=/app/public TANDEM_BRAND_FILE=/app/brand.json
+ ---> Running in 9d374f941beb
+ ---> Removed intermediate container 9d374f941beb
+ ---> 0009894cce39
+Step 21/25 : USER 10001:10001
+ ---> Running in 73026bedaa50
+ ---> Removed intermediate container 73026bedaa50
+ ---> 3d7610cab039
+Step 22/25 : EXPOSE 8790
+ ---> Running in 08c0640e2e23
+ ---> Removed intermediate container 08c0640e2e23
+ ---> 22907123c1a4
+Step 23/25 : HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD ["bun", "-e", "const r = await fetch('http://127.0.0.1:8790/api/health'); const h = await r.json(); process.exit(r.ok && h.ok ? 0 : 1)"]
+ ---> Running in 18c2462a4e94
+ ---> Removed intermediate container 18c2462a4e94
+ ---> 027ea5f005d2
+Step 24/25 : CMD ["bun", "src/index.ts"]
+ ---> Running in 669cf199b756
+ ---> Removed intermediate container 669cf199b756
+ ---> bd436d9dbd1f
+Step 25/25 : LABEL com.docker.compose.image.builder=classic
+ ---> Running in 186d7768d6fc
+ ---> Removed intermediate container 186d7768d6fc
+ ---> a8bc610bc592
+Successfully built a8bc610bc592
+Successfully tagged twebneko-gateway:latest
+ Image twebneko-gateway Built 
+ Image twebneko-gateway Built 
+ Container twebneko-neko-1 Running 
+ Container twebneko-neo-1 Running 
+ Container twebneko-gateway-1 Recreate 
+ Container twebneko-gateway-1 Recreated 
+ Container twebneko-neo-prefs-1 Starting 
+ Container twebneko-neo-prefs-1 Started 
+ Container twebneko-neo-prefs-1 Waiting 
+ Container twebneko-neo-prefs-1 Exited 
+ Container twebneko-neo-1 Waiting 
+ Container twebneko-neo-1 Waiting 
+ Container twebneko-neo-1 Healthy 
+ Container twebneko-neo-1 Healthy 
+ Container twebneko-gateway-1 Starting 
+ Container twebneko-gateway-1 Started 
+ Container twebneko-neo-1 Waiting 
+ Container twebneko-neko-1 Waiting 
+ Container twebneko-gateway-1 Waiting 
+ Container twebneko-neo-prefs-1 Waiting 
+ Container twebneko-neo-prefs-1 Exited 
+ Container twebneko-neo-1 Healthy 
+ Container twebneko-neko-1 Healthy 
+ Container twebneko-gateway-1 Healthy 

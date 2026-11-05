@@ -1,0 +1,33 @@
+{
+  "checks": [
+    "decoded WebRTC video through authenticated gateway",
+    "screen message CSS × displayScale, even pixels",
+    "Watch enables Follow",
+    "Agent disables Follow",
+    "watching desktop commands send no remote input",
+    "first takeover click reaches remote exactly once",
+    "desktop new-tab reaches remote through neko key API",
+    "desktop close-tab reaches remote",
+    "Mac Cmd maps to Control and remote clipboard writes desktop bridge",
+    "local clipboard API then Ctrl+V changes remote text",
+    "Cmd+Q/H/M/backquote remain local",
+    "watch-mode keyboard ignored",
+    "ICE loss keeps WebRTC during ten-second grace",
+    "sustained ICE loss falls back after ten seconds",
+    "fallback VNC sends real desktop keyboard input",
+    "fallback VNC closes remote tab",
+    "Lite still connects to the real screencast",
+    "fallback remains VNC for rest of page load",
+    "no decoded frame falls back after eight seconds",
+    "/api/me.webrtc false starts VNC directly",
+    "no browser runtime exceptions"
+  ],
+  "errors": [],
+  "viewport": "1440x900 DPR 2",
+  "screenshots": [
+    "agent.png",
+    "manual.png",
+    "fallback.png",
+    "no-frame-fallback.png"
+  ]
+}

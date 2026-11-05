@@ -10,7 +10,7 @@ export const MAX_REMOTE_PIXELS = 3840 * 2400;
 
 export function remoteSize(css: { w: number; h: number }, scale: number) {
   let w = css.w * scale, h = css.h * scale;
-  const over = Math.sqrt((w * h) / MAX_REMOTE_PIXELS);
+  const over = Math.max(w / 3840, h / 2400, Math.sqrt((w * h) / MAX_REMOTE_PIXELS));
   if (over > 1) { w /= over; h /= over; }
   // Even sizes keep the encoder and the CSS layout (size / scale) whole.
   return { w: Math.max(2, Math.floor(w / 2) * 2), h: Math.max(2, Math.floor(h / 2) * 2) };
