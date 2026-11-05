@@ -7,6 +7,7 @@ import { displayUrl, fitFrame, mapPointer, parseFrame } from './frame';
 import { ClickCounter, keyMessage, modifiers, mouseButton, wheelDelta } from './input';
 import { commandRoute, selectedTabIndex } from './commands';
 import type { Brand, Control, FrameHeader, Message, RemoteDialog, RemoteTab } from './types';
+import { BuildWatch } from './update';
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('page');
 const context = canvas.getContext('2d', { alpha: false })!;
@@ -27,6 +28,7 @@ const neoBar = $('neo-bar');
 let tabs: RemoteTab[] = [];
 let viewedId = '', activeId = '';
 let control: Control = { controller: 'agent', yours: false, since: 0, agentBusy: false, pendingAgentCalls: 0 };
+const builds = new BuildWatch(() => location.reload(), () => notify('Tandem was updated. It reloads when you hand control back.'));
 let preference: 'watch' | 'agent' = 'watch';
 try { if (localStorage.getItem('tandem.mode') === 'agent') preference = 'agent'; } catch { /* Optional preference. */ }
 let socket: WebSocket | undefined;
@@ -232,6 +234,7 @@ function receive(message: Message) {
   switch (message.t) {
     case 'welcome':
       control = message.control as Control;
+      builds.welcome(message.build, control.yours);
       updateTabs(message.tabs as RemoteTab[], String(message.activeTargetId ?? ''));
       if (view === 'lite' && viewedId) send({ t: 'view', targetId: viewedId });
       follow();
@@ -239,7 +242,7 @@ function receive(message: Message) {
     case 'tabs': updateTabs(message.tabs as RemoteTab[], String(message.activeTargetId ?? '')); break;
     case 'control':
       if (control.yours && !message.yours) { pressed.clear(); pendingMove = undefined; heldButtons.clear(); }
-      control = message as unknown as Control; follow(); render(); break;
+      control = message as unknown as Control; follow(); render(); builds.control(control.yours); break;
     case 'agent.activity':
       if (view === 'lite' && mode() === 'watch' && typeof message.targetId === 'string' && tabs.some(t => t.targetId === message.targetId)) selectTab(message.targetId, false);
       break;

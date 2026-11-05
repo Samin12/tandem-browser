@@ -64,6 +64,9 @@ test('parallel login attempts cannot bypass per-IP rate limit', async () => {
 test('public assets cannot traverse into the protected app shell', async () => {
   const response = await fetch(base + '/assets/..%2findex.html'); expect(response.status).toBe(404);
 });
+test('viewer files are revalidated after deploys', async () => {
+  const login = await fetch(base + '/login'); expect(login.status).toBe(200); expect(login.headers.get('cache-control')).toBe('no-cache');
+});
 test('desktop HTTP files require session; desktop upgrade requires cookie and Origin', async () => {
   expect((await fetch(base + '/desktop/')).status).toBe(401);
   const redirect = await fetch(base + '/desktop/', { headers: { cookie }, redirect: 'manual' }); expect(redirect.status).toBe(302); expect(redirect.headers.get('location')).toBe('/desktop/vnc.html?path=desktop/websockify&autoconnect=1&resize=remote&reconnect=1');
@@ -134,7 +137,7 @@ test('socket welcome, typed input refusal, take/release, protocol violations, lo
   await new Promise<void>((resolve, reject) => { ws.onopen = () => resolve(); ws.onerror = () => reject(new Error('ws failed')); });
   // Wait for each reply rather than a fixed sleep; CI runners can be slower than 10 ms.
   const until = async (ok: () => boolean) => { for (let i = 0; i < 200 && !ok(); i++) await Bun.sleep(10); };
-  await until(() => messages.length > 0); expect(messages[0].t).toBe('welcome');
+  await until(() => messages.length > 0); expect(messages[0].t).toBe('welcome'); expect(messages[0].build).toMatch(/^[0-9a-f]{16}$/);
   ws.send(JSON.stringify({ t: 'hello', viewport: { w: 100, h: 100, dpr: 1 } })); ws.send(JSON.stringify({ t: 'input.text', targetId: 'x', text: 'secret' }));
   await until(() => messages.some(m => m.code === 'not_in_control')); expect(messages.some(m => m.code === 'not_in_control')).toBe(true);
   ws.send(JSON.stringify({ t: 'control.take' })); await until(() => gateway.control.controller === 'human'); expect(gateway.control.controller).toBe('human');

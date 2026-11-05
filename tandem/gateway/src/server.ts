@@ -1,5 +1,6 @@
 import type { Server, ServerWebSocket } from 'bun';
-import { realpathSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, realpathSync, readFileSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { resolve, sep } from 'node:path';
 import type { Config } from './config';
 import { Sessions, sessionCookie, type Session } from './auth';
@@ -17,6 +18,14 @@ import { AgentCdpProxy, agentAuthorized, cdpRoute, CDP_BYTES, type AgentCdpConne
 import { Neko, nekoRoute } from './neko';
 
 export const VERSION = '0.1.0';
+export function webFingerprint(root: string) {
+  const hash = createHash('sha256');
+  for (const name of readdirSync(root, { recursive: true, encoding: 'utf8' }).sort()) {
+    const path = resolve(root, name);
+    if (statSync(path).isFile()) hash.update(name).update('\0').update(readFileSync(path));
+  }
+  return hash.digest('hex').slice(0, 16);
+}
 interface SocketData { kind: 'viewer' | 'desktop' | 'neko' | 'cdp'; sessionId: string; agentCdp?: AgentCdpConnection; cdpPath?: string; hello: boolean; viewport: { w: number; h: number; dpr: number }; targetId?: string; upstream?: WebSocket; rfb?: RfbFilter; queue: Promise<void>; openedAt: number }
 type Socket = ServerWebSocket<SocketData>;
 class NotInControl extends Error {}
@@ -33,6 +42,8 @@ export function createGateway(config: Config) {
   catch { throw new Error('TANDEM_BRAND_FILE: a readable JSON object is required'); }
   let publicRoot: string;
   try { publicRoot = realpathSync(config.publicDir); if (!statSync(publicRoot).isDirectory()) throw 0; } catch { throw new Error('TANDEM_PUBLIC_DIR: a readable directory is required'); }
+  // Fingerprint of the viewer files; open viewers reload when a deploy changes it.
+  const webBuild = webFingerprint(publicRoot);
   const send = (ws: Socket, value: unknown) => { if (ws.readyState === 1) ws.send(JSON.stringify(value)); };
   const broadcast = (value: unknown) => { for (const ws of viewers) send(ws, value); };
   const tabs = () => ({ t: 'tabs', tabs: [...cdp.tabs.values()], activeTargetId: cdp.activeTargetId ?? null });
@@ -77,7 +88,8 @@ export function createGateway(config: Config) {
       filePath = resolve(root, 'index.html'); file = Bun.file(filePath);
     }
     try { const actual = realpathSync(filePath); if (!actual.startsWith(root + sep) || (path.startsWith('/assets/') && !actual.startsWith(resolve(root, 'assets') + sep))) return fail('not_found', 404); } catch { return fail('not_found', 404); }
-    return new Response(file);
+    // Viewer files keep fixed names, so browsers must revalidate them after a deploy.
+    return new Response(file, { headers: { 'cache-control': 'no-cache' } });
   }
   async function route(req: Request, server: Server<SocketData>): Promise<Response | undefined> {
     const url = new URL(req.url), path = url.pathname;
@@ -256,7 +268,7 @@ export function createGateway(config: Config) {
         if (ws.data.kind === 'neko') { neko.attach(ws); return; }
         if (ws.data.kind === 'viewer') {
           viewers.add(ws);
-          send(ws, { t: 'welcome', sessionId: ws.data.sessionId, brand, control: control.state(ws.data.sessionId), tabs: [...cdp.tabs.values()], activeTargetId: cdp.activeTargetId ?? null, serverVersion: VERSION });
+          send(ws, { t: 'welcome', sessionId: ws.data.sessionId, brand, control: control.state(ws.data.sessionId), tabs: [...cdp.tabs.values()], activeTargetId: cdp.activeTargetId ?? null, serverVersion: VERSION, build: webBuild });
         } else {
           desktops.add(ws); audit.write('human', 'desktop.open', {}, { sessionId: ws.data.sessionId });
           const target = new URL('/websockify', config.novncUrl); target.protocol = target.protocol === 'https:' ? 'wss:' : 'ws:';

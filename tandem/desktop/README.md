@@ -28,7 +28,7 @@ Use **Change Server…** in the application / File menu to reconnect elsewhere.
 ```sh
 bun run icons       # branding SVG → build/icon.png, 1024 px
 bun run dist        # native platform / architecture, suitable for CI
-bun run dist:mac    # unsigned arm64 + x64 DMG and ZIP
+bun run dist:mac    # ad-hoc signed arm64 + x64 DMG and ZIP
 bun run dist:win    # x64 NSIS installer; run on Windows
 bun run dist:linux  # x64 AppImage + deb; run on Linux
 ```
@@ -38,9 +38,17 @@ All artifacts go to `release/`. Packaging reads `../branding/brand.json` and
 into `dist/`, so installed apps do not depend on the checkout. Electron-builder
 derives platform icons from the PNG. Runtime dependencies are Electron built-ins.
 
-macOS signing is explicitly disabled unless `CSC_LINK` or `CSC_NAME` is provided.
-For signing, use electron-builder's `CSC_LINK` + `CSC_KEY_PASSWORD`, or `CSC_NAME`
-for a local identity. Hardened runtime and JIT entitlements are configured. To
+Install or update the app on this Mac (builds, verifies the signature, moves the
+previous copy to `~/.tandem/app-backups/`, installs into `~/Applications`, opens it):
+
+```sh
+scripts/install-local.sh            # --no-build reuses release/, --no-launch skips opening
+```
+
+Without `CSC_LINK` or `CSC_NAME`, macOS builds are signed ad hoc (whole bundle, no
+hardened runtime): a binary-only signature leaves macOS holding the app paused at
+launch. For Developer ID signing, use electron-builder's `CSC_LINK` + `CSC_KEY_PASSWORD`,
+or `CSC_NAME` for a local identity; hardened runtime and JIT entitlements then apply. To
 enable notarization also set `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and
 `APPLE_TEAM_ID`. No credentials belong in this repository. These signing and
 notarization paths need verification with release credentials. Windows signing
