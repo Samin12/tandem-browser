@@ -153,6 +153,8 @@ function createViewer(url: string, desktop = false): BrowserWindow {
     ...windowBounds(), minWidth: 640, minHeight: 480, show: !smoke,
     title: desktop ? 'Desktop view' : brand.productName,
     backgroundColor: brand.colors.background,
+    // The viewer's own top bar doubles as the title bar; traffic lights sit in it.
+    ...(process.platform === 'darwin' && !desktop ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 14, y: 12 } } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'), partition: 'persist:tandem',
       contextIsolation: true, sandbox: true, nodeIntegration: false, webSecurity: true,

@@ -24,12 +24,17 @@ export class NeoView {
   private viewerConnected = false;
   private ready = false;
   private suppressed = new Set<string>();
+  private pendingClick?: { x: number; y: number; button: number; at: number };
   constructor(private container: HTMLElement, private mac: boolean, private background: string,
-    private status: (status: NeoStatus) => void, private notify: (text: string, takeControl?: boolean) => void) {
+    private status: (status: NeoStatus) => void, private notify: (text: string, takeControl?: boolean) => void,
+    private takeControl: () => void) {
+    // Clicking the page grabs the wheel: take control, then replay that click once input is allowed.
     container.addEventListener('pointerdown', event => {
-      if (this.canInput()) return;
+      if (this.canInput() || !this.ready) return;
       event.preventDefault(); event.stopImmediatePropagation();
-      this.notify('Take control to use the browser', true);
+      if (event.button !== 0 && event.button !== 2) return;
+      this.pendingClick = { x: event.clientX, y: event.clientY, button: event.button, at: Date.now() };
+      this.takeControl();
     }, true);
     container.addEventListener('keydown', event => this.keydown(event), true);
     container.addEventListener('keyup', event => {
@@ -52,6 +57,18 @@ export class NeoView {
     this.control = control; this.viewerConnected = connected;
     const readonly = viewOnly(control, connected);
     if (this.rfb && this.rfb.viewOnly !== readonly) this.rfb.viewOnly = readonly;
+    const click = this.pendingClick;
+    if (!click) return;
+    if (Date.now() - click.at > 5000) { this.pendingClick = undefined; return; }
+    if (!this.canInput()) return;
+    this.pendingClick = undefined;
+    const canvas = this.container.querySelector('canvas');
+    if (!canvas) return;
+    this.rfb!.focus();
+    const init = { clientX: click.x, clientY: click.y, button: click.button, buttons: click.button === 2 ? 2 : 1, bubbles: true, cancelable: true, view: window };
+    canvas.dispatchEvent(new MouseEvent('mousemove', { ...init, buttons: 0 }));
+    canvas.dispatchEvent(new MouseEvent('mousedown', init));
+    canvas.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
   }
   focus() { this.rfb?.focus(); }
   private canInput() { return this.ready && !this.stopped && !viewOnly(this.control, this.viewerConnected); }

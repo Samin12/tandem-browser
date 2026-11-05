@@ -56,11 +56,17 @@ function send(message: Message) {
 }
 function remote(message: Message) { return canInput() && send({ ...message, targetId: viewedId }); }
 function follow() { send({ t: 'follow', enabled: view === 'neo' && preference === 'watch' && !control.yours }); }
+document.body.classList.toggle('desktop-mac', window.tandemDesktop?.platform === 'darwin');
 function applyView() {
   document.body.classList.toggle('neo-view', view === 'neo');
   neoBar.hidden = view !== 'neo'; $('neo-window').hidden = view !== 'neo';
-  if (view === 'neo') { neoBar.append(logo, $('connection'), toolbarRight); neo?.start(); }
-  else { tabRow.prepend(logo); tabRow.append($('connection')); document.querySelector('.toolbar')!.append(toolbarRight); neo?.stop(); }
+  if (view === 'neo') {
+    // One bar: the take-control action sits beside who is driving instead of in a second row.
+    neoBar.append(logo, $('connection'), toolbarRight); $('control-indicator').after($('banner-action')); neo?.start();
+  } else {
+    tabRow.prepend(logo); tabRow.append($('connection')); document.querySelector('.toolbar')!.append(toolbarRight);
+    $('control-banner').append($('banner-action')); neo?.stop();
+  }
   $('switch-view').textContent = view === 'neo' ? 'Lite view' : 'Neo view';
 }
 function switchView(next: View) {
@@ -167,10 +173,10 @@ function render() {
   const pending = control.pendingAgentCalls;
   const driver = control.yours ? "You're driving" : control.controller === 'human' ? `${control.holderLabel || 'Another viewer'} is driving` : `${agent} is driving`;
   $('control-indicator').textContent = view === 'neo' && control.yours ? `${driver} · ${agent} paused${pending ? ` (${pending} waiting)` : ''}` : `${driver}${pending ? ` · ${pending} waiting` : ''}`;
-  $('control-banner').hidden = view === 'neo' && control.yours;
+  $('control-banner').hidden = view === 'neo';
   $('control-indicator').title = control.agentBusy ? 'An agent call is finishing. Already-running calls cannot be interrupted.' : driver;
   $('banner-text').textContent = control.yours ? `You're driving · ${agent} is paused${pending ? ` (${pending} waiting)` : ''}${control.agentBusy ? ' · One call is finishing' : ''}` : driver;
-  $('banner-action').textContent = control.yours ? `Hand back to ${agent}` : 'Take control';
+  $('banner-action').textContent = control.yours ? `Hand back to ${agent}` : view === 'neo' ? 'Take control · or click the page' : 'Take control';
   $<HTMLButtonElement>('banner-action').disabled = !connected;
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-mode]')) {
     button.setAttribute('aria-pressed', String(button.dataset.mode === mode())); button.disabled = !connected;
@@ -461,7 +467,7 @@ function resized() { draw(); clearTimeout(viewportTimer); viewportTimer = setTim
 new ResizeObserver(resized).observe(canvas); window.addEventListener('resize', resized);
 window.addEventListener('pagehide', () => { stopped = true; send({ t: 'follow', enabled: false }); neo?.stop(); releaseInputs(); unsubscribe?.(); clearInterval(pingTimer); clearTimeout(reconnectTimer); socket?.close(); frame?.image.close(); });
 async function start() { try { brand = await loadBrand();
-  neo = new NeoView($('neo-window'), mac, brand.colors.background || '#FAF9F5', status => { neoStatus = status; renderConnection(); }, notify);
+  neo = new NeoView($('neo-window'), mac, brand.colors.background || '#FAF9F5', status => { neoStatus = status; renderConnection(); }, notify, () => setMode('manual'));
   applyView(); render(); draw(); await connect(); } catch (error) { notify(error instanceof Error ? error.message : 'Unable to start browser.'); } }
 applyView();
 void start();
