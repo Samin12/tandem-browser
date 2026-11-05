@@ -1,0 +1,49 @@
+# TEST ONLY: disposable credentials, never use on a public host.
+name: tandem-ci
+x-logging: &logging
+  driver: json-file
+  options: {max-size: 10m, max-file: '3'}
+services:
+  neo:
+    image: ${TANDEM_NEO_IMAGE:?Load neo-image.env}
+    hostname: neo
+    shm_size: 1g
+    stop_grace_period: 45s
+    restart: "no"
+    environment:
+      NEO_SCREEN: ${NEO_SCREEN:-1600x1000}
+      PUID: '1000'
+      PGID: '1000'
+    volumes:
+      - neo-ci:/data
+      - ./policies/tandem-restore.json:/etc/chromium/policies/managed/tandem-restore.json:ro
+    ports: ['127.0.0.1:${TANDEM_PORT:-8790}:8790']
+    logging: *logging
+  gateway:
+    build: {context: '..', dockerfile: gateway/Dockerfile}
+    network_mode: service:neo
+    depends_on:
+      neo: {condition: service_healthy, restart: true}
+    environment:
+      TANDEM_PUBLIC_ORIGIN: http://127.0.0.1:8790
+      TANDEM_PASSWORD: tandem-local-test-password
+      TANDEM_AGENT_TOKEN: tandem-local-test-token-00000000000000000000
+      TANDEM_ENV: development
+      TANDEM_AGENT_HOLD_SECONDS: '2'
+      TANDEM_DATA_DIR: /var/lib/tandem
+    volumes: ['gateway-ci:/var/lib/tandem']
+    read_only: true
+    tmpfs: ['/tmp:rw,noexec,nosuid,size=64m']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+    healthcheck:
+      test: ['CMD', 'bun', '-e', 'const r=await fetch("http://127.0.0.1:8790/api/health");const h=await r.json();process.exit(r.ok&&h.ok&&h.cdp&&h.mcp?0:1)']
+      interval: 10s
+      timeout: 5s
+      start_period: 120s
+      retries: 6
+    logging: *logging
+volumes:
+  neo-ci:
+  gateway-ci:

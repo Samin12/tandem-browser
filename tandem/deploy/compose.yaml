@@ -1,0 +1,55 @@
+name: tandem
+x-logging: &logging
+  driver: json-file
+  options: {max-size: 10m, max-file: '3'}
+services:
+  neo:
+    image: ${TANDEM_NEO_IMAGE:?Load neo-image.env}
+    hostname: neo
+    shm_size: 1g
+    stop_grace_period: 45s
+    restart: unless-stopped
+    environment:
+      NEO_SCREEN: ${NEO_SCREEN:-1600x1000}
+      PUID: '1000'
+      PGID: '1000'
+    volumes:
+      - ${TANDEM_DATA:-/var/lib/tandem}/neo:/data
+      - ./policies/tandem-restore.json:/etc/chromium/policies/managed/tandem-restore.json:ro
+    ports: ['127.0.0.1:${TANDEM_PORT:-8790}:8790']
+    logging: *logging
+  gateway:
+    build: {context: '..', dockerfile: gateway/Dockerfile}
+    network_mode: service:neo
+    depends_on:
+      neo: {condition: service_healthy, restart: true}
+    env_file: .env
+    environment:
+      TANDEM_ENV: production
+      TANDEM_DATA_DIR: /var/lib/tandem
+    volumes: ['${TANDEM_DATA:-/var/lib/tandem}/gateway:/var/lib/tandem']
+    read_only: true
+    tmpfs: ['/tmp:rw,noexec,nosuid,size=64m']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'bun', '-e', 'const r=await fetch("http://127.0.0.1:8790/api/health");const h=await r.json();process.exit(r.ok&&h.ok&&h.cdp&&h.mcp?0:1)']
+      interval: 10s
+      timeout: 5s
+      start_period: 120s
+      retries: 6
+    logging: *logging
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    depends_on: {gateway: {condition: service_healthy}}
+    environment:
+      TANDEM_DOMAIN: ${TANDEM_DOMAIN:?Set TANDEM_DOMAIN}
+      TANDEM_ACME_EMAIL: ${TANDEM_ACME_EMAIL:?Set TANDEM_ACME_EMAIL}
+    ports: ['80:80', '443:443', '443:443/udp']
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${TANDEM_DATA:-/var/lib/tandem}/caddy/data:/data
+      - ${TANDEM_DATA:-/var/lib/tandem}/caddy/config:/config
+    logging: *logging

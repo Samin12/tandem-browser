@@ -1,0 +1,9 @@
+[Unit]
+Description=Encrypted Tandem browser backup
+Requires=docker.service
+After=docker.service
+[Service]
+Type=oneshot
+ExecStart=/opt/tandem-browser/tandem/deploy/backup.sh
+UMask=0077
+TimeoutStartSec=30min

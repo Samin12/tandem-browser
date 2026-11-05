@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# shellcheck source=tandem/deploy/common.sh
+source "$(dirname "$0")/common.sh"
+cmd=${1:-help}; shift || true
+case "$cmd" in
+  up) compose up -d --wait "$@" ;;
+  down) compose down "$@" ;;
+  restart) compose down; compose up -d --wait ;;
+  status) compose ps; curl -fsS "http://127.0.0.1:$(read_env TANDEM_PORT 8790)/api/health"; echo ;;
+  logs) compose logs --tail 200 -f "$@" ;;
+  update)
+    git -C "$DEPLOY_DIR/../.." pull --ff-only
+    compose pull neo caddy
+    compose build
+    # Recreate both namespace partners together after an engine replacement.
+    compose up -d --wait --force-recreate
+    "$0" status ;;
+  backup) exec "$DEPLOY_DIR/backup.sh" "$@" ;;
+  restore) exec "$DEPLOY_DIR/restore.sh" "$@" ;;
+  set-password)
+    read -r -s -p 'New password: ' password; echo
+    read -r -s -p 'Repeat password: ' repeat; echo
+    [[ -n "$password" && "$password" == "$repeat" ]] || { echo 'Passwords do not match or are empty' >&2; exit 1; }
+    hash=$(printf '%s' "$password" | hash_password)
+    # shellcheck disable=SC2016 # Argon2 prefix is literal.
+    [[ "$hash" == '$argon2id$'* ]] || { echo 'Gateway did not return an Argon2id hash' >&2; exit 1; }
+    printf '%s' "$hash" | write_env TANDEM_PASSWORD_HASH
+    unset password repeat hash
+    compose up -d --wait --force-recreate gateway ;;
+  rotate-agent-token)
+    openssl rand -hex 32 | write_env TANDEM_AGENT_TOKEN
+    compose up -d --wait --force-recreate gateway
+    echo 'Token rotated. Copy TANDEM_AGENT_TOKEN from the protected .env into Hermes.' ;;
+  totp-setup)
+    secret=$(python3 -c 'import base64,secrets; print(base64.b32encode(secrets.token_bytes(20)).decode().rstrip("="))')
+    uri="otpauth://totp/Tandem:owner?secret=$secret&issuer=Tandem&algorithm=SHA1&digits=6&period=30"
+    printf '%s' "$secret" | write_env TANDEM_TOTP_SECRET
+    printf '%s\n' "$uri"
+    if command -v qrencode >/dev/null; then qrencode -t ANSIUTF8 "$uri"; fi
+    compose up -d --wait --force-recreate gateway ;;
+  hermes-config)
+    cat <<YAML
+# VPS-local (keep the token in your shell environment or secret manager):
+mcp_servers:
+  tandem:
+    url: http://127.0.0.1:$(read_env TANDEM_PORT 8790)/mcp
+    headers:
+      Authorization: Bearer \${TANDEM_AGENT_TOKEN}
+# Remote Mac: use this URL in the same mapping instead:
+# url: $(read_env TANDEM_PUBLIC_ORIGIN)/mcp
+YAML
+    ;;
+  help|--help|-h) echo 'Usage: tandem {up|down|restart|status|logs [svc]|update|backup|restore <file>|set-password|rotate-agent-token|totp-setup|hermes-config}' ;;
+  *) echo "Unknown command: $cmd" >&2; exit 1 ;;
+esac

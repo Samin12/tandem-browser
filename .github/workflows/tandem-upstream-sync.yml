@@ -1,0 +1,46 @@
+name: Tandem upstream sync
+on:
+  schedule:
+    - cron: '17 9 * * *'
+  workflow_dispatch:
+    inputs:
+      force_image_check:
+        description: Check the promoted engine image (also checked on every scheduled run)
+        type: boolean
+        default: true
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+concurrency:
+  group: tandem-upstream-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ secrets.TANDEM_SYNC_TOKEN || github.token }}
+      TANDEM_NOTIFY_WEBHOOK: ${{ secrets.TANDEM_NOTIFY_WEBHOOK }}
+    steps:
+      - name: Token warning
+        env:
+          SYNC_TOKEN: ${{ secrets.TANDEM_SYNC_TOKEN }}
+        run: |
+          if [[ -z "$SYNC_TOKEN" ]]; then
+            echo '::warning::TANDEM_SYNC_TOKEN is missing. GITHUB_TOKEN may not push upstream workflow changes and PRs it opens will NOT trigger CI. Add the fine-grained PAT documented in UPSTREAM.md.'
+          fi
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.TANDEM_SYNC_TOKEN || github.token }}
+      - name: Prepare identity and upstream
+        run: |
+          git config user.name 'tandem-sync[bot]'
+          git config user.email 'tandem-sync[bot]@users.noreply.github.com'
+          git remote add upstream https://github.com/browseros-ai/BrowserOS.git
+      - name: Merge source, pin engine, check contract and maintain PR
+        env:
+          FORCE_IMAGE_CHECK: ${{ inputs.force_image_check }}
+        run: tandem/scripts/sync-ci.sh

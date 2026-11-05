@@ -1,0 +1,22 @@
+name: Tandem upstream workflow guard
+on:
+  schedule:
+    - cron: '43 8 * * *'
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: tandem-workflow-guard
+  cancel-in-progress: false
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: tandem/scripts/disable-upstream-workflows.sh
+        env:
+          GH_TOKEN: ${{ github.token }}

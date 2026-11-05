@@ -1,0 +1,9 @@
+{
+	email {$TANDEM_ACME_EMAIL}
+}
+{$TANDEM_DOMAIN} {
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	reverse_proxy neo:8790 {
+		flush_interval -1
+	}
+}

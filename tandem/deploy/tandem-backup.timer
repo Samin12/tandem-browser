@@ -1,0 +1,8 @@
+[Unit]
+Description=Daily Tandem backup at 04:15 server time
+[Timer]
+OnCalendar=*-*-* 04:15:00
+RandomizedDelaySec=5min
+Persistent=true
+[Install]
+WantedBy=timers.target

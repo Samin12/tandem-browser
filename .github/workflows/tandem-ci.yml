@@ -1,0 +1,88 @@
+name: Tandem CI
+on:
+  pull_request:
+    paths: ['tandem/**', '.github/workflows/tandem-*.yml', 'packages/browseros/docker/neo/**']
+  push:
+    branches: [main]
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: tandem-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  unit:
+    name: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with: {bun-version: '1.3.14'}
+      - name: Gateway
+        working-directory: tandem/gateway
+        run: |
+          bun install --frozen-lockfile
+          bun run typecheck
+          bun test
+      - name: Web
+        working-directory: tandem/web
+        run: |
+          bun install --frozen-lockfile
+          bun run typecheck
+          bun test
+          bun run build
+      - name: Desktop
+        working-directory: tandem/desktop
+        run: |
+          bun install --frozen-lockfile
+          bun x tsc --noEmit
+          bun test
+  contract:
+    name: contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Source and pinned image contract
+        run: |
+          tandem/scripts/check-upstream-contract.sh
+          image=$(sed -n 's/^TANDEM_NEO_IMAGE=//p' tandem/deploy/neo-image.env)
+          tandem/scripts/check-upstream-contract.sh --image "$image"
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with: {bun-version: '1.3.14'}
+      - name: Start disposable stack
+        run: docker compose -f tandem/deploy/compose.ci.yaml --env-file tandem/deploy/neo-image.env up -d --wait --build
+      - name: Gateway browser acceptance
+        working-directory: tandem/gateway
+        env:
+          TANDEM_URL: http://127.0.0.1:8790
+          TANDEM_ORIGIN: http://127.0.0.1:8790
+          TANDEM_TEST_PASSWORD: tandem-local-test-password
+          TANDEM_AGENT_TOKEN: tandem-local-test-token-00000000000000000000
+        run: |
+          bun install --frozen-lockfile
+          bun run e2e
+      - name: Failure logs
+        if: failure()
+        run: docker compose -f tandem/deploy/compose.ci.yaml --env-file tandem/deploy/neo-image.env logs --no-color
+      - name: Clean up
+        if: always()
+        run: docker compose -f tandem/deploy/compose.ci.yaml --env-file tandem/deploy/neo-image.env down -v --remove-orphans
+  tandem-ci-ok:
+    name: tandem-ci-ok
+    if: always()
+    needs: [unit, contract, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require all checks
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: jq -e 'all(.[]; .result == "success")' <<< "$RESULTS"
