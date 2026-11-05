@@ -10,7 +10,7 @@ if (!base || !origin || !password || !agent) {
   console.error('Required: TANDEM_URL, TANDEM_ORIGIN, TANDEM_TEST_PASSWORD, TANDEM_AGENT_TOKEN'); process.exit(1);
 }
 let passed = 0, failed = 0, cookie = '', sessionId = '', mcpSession = '', protocol = '2024-11-05';
-let ws: WebSocket | undefined, nekoWs: WebSocket | undefined;
+let ws: WebSocket | undefined, nekoWs: WebSocket | undefined, agentWs: WebSocket | undefined;
 const messages: any[] = [], frames: Buffer[] = [], createdTabs = new Set<string>();
 function assert(condition: unknown, message: string): asserts condition { if (!condition) throw new Error(message); }
 const check = async (name: string, run: () => Promise<void>) => {
@@ -77,6 +77,41 @@ try {
     send({ t: 'hello', viewport: { w: 1280, h: 800, dpr: 1 } });
     const welcome = await until(() => messages.find(m => m.t === 'welcome'), 'welcome');
     assert(welcome.sessionId === sessionId && Array.isArray(welcome.tabs), 'invalid welcome'); assert(welcome.control.controller === 'agent', 'initial control not agent');
+  });
+  await check('CDP bad token rejected and extra HTTP endpoints blocked', async () => {
+    const bad = await fetch(base + '/cdp/wrong/json/version');
+    assert(bad.status === 401 && (await bad.json() as any).error === 'unauthorized', 'CDP bad auth differs from MCP');
+    assert((await fetch(base + `/cdp/${agent}/json/new`)).status === 404, 'CDP new exposed');
+  });
+  await check('CDP discovery URL connects, creates, evaluates and closes a target; human hold releases in order', async () => {
+    const response = await fetch(base + `/cdp/${agent}/json/version/`); assert(response.ok, 'CDP discovery failed (Playwright trailing slash)');
+    const version = await response.json() as any;
+    assert(version.webSocketDebuggerUrl.startsWith(origin!.replace(/^http/, 'ws') + `/cdp/${agent}/devtools/browser/`), 'CDP debugger URL not rewritten');
+    const received: any[] = [];
+    agentWs = new WebSocket(version.webSocketDebuggerUrl);
+    agentWs.onmessage = event => received.push(JSON.parse(String(event.data)));
+    await new Promise<void>((resolve, reject) => { agentWs!.onopen = () => resolve(); agentWs!.onerror = () => reject(new Error('CDP socket failed')); });
+    let id = 0, target: string | undefined;
+    const call = async (method: string, params = {}, sessionId?: string) => {
+      const seq = ++id; agentWs!.send(JSON.stringify({ id: seq, method, params, sessionId }));
+      const value = await until(() => received.find(v => v.id === seq), 'CDP ' + method);
+      assert(!value.error, 'CDP command failed: ' + method); return value.result;
+    };
+    try {
+      target = (await call('Target.createTarget', { url: 'about:blank' })).targetId;
+      const { sessionId } = await call('Target.attachToTarget', { targetId: target, flatten: true });
+      assert((await call('Runtime.evaluate', { expression: '6 * 7', returnByValue: true }, sessionId)).result.value === 42, 'CDP evaluate failed');
+      await controlled('human');
+      let done = false;
+      const pending = call('Runtime.evaluate', { expression: '21 * 2', returnByValue: true }, sessionId).then(value => { done = true; return value; });
+      await until(() => messages.filter(m => m.t === 'control').at(-1)?.pendingAgentCalls > 0, 'CDP held state');
+      await call('Browser.getVersion'); await Bun.sleep(100); assert(!done, 'CDP mutation bypassed manual control');
+      await controlled('agent'); assert((await pending).result.value === 42, 'held evaluate failed after release');
+    } finally {
+      if (messages.filter(m => m.t === 'control').at(-1)?.controller === 'human') await controlled('agent');
+      if (target) await call('Target.closeTarget', { targetId: target });
+      agentWs.close(); agentWs = undefined;
+    }
   });
   await check('input refused while agent controls', async () => {
     const mark = messages.length; send({ t: 'input.text', targetId: 'irrelevant', text: 'throwaway' });
@@ -256,6 +291,18 @@ try {
     assert(response.id === 'held-timeout' && response.result.isError === true && response.result.content[0].text === PAUSED_TEXT, 'wrong timeout result');
     await controlled('agent');
   });
+  await check('quickack MCP tabs latency stays below 30 ms median', async () => {
+    const samples: number[] = [];
+    for (let i = 0; i < 25; i++) {
+      const began = performance.now(), response = await rpc('tools/call', { name: 'tabs', arguments: { action: 'list' } });
+      const elapsed = performance.now() - began; assert(!response.result.isError, 'MCP tabs failed');
+      if (i >= 5) samples.push(elapsed);
+    }
+    samples.sort((a, b) => a - b);
+    const median = (samples[9]! + samples[10]!) / 2;
+    console.log(`MCP tabs (20 samples, 5 warmup): median ${median.toFixed(2)} ms, min ${samples[0]!.toFixed(2)} ms, p95 ${samples[18]!.toFixed(2)} ms`);
+    assert(median < 30, 'MCP tabs median exceeds 30 ms');
+  });
   await check('agent-created tab emits agent.activity and agent provenance', async () => {
     const mark = messages.length; const before = new Set(messages.filter(m => m.t === 'tabs').at(-1)?.tabs.map((t: any) => t.targetId));
     const response = await rpc('tools/call', { name: 'tabs', arguments: { action: 'new', url: 'https://example.org' } }); assert(!response.result.isError, 'MCP tab new failed');
@@ -275,7 +322,7 @@ try {
     const response = await viewerFetch('/api/logout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); assert(response.ok, 'logout failed'); assert(await close === 4401, 'logout close code');
   });
 } catch {} finally {
-  ws?.close(); nekoWs?.close();
+  ws?.close(); nekoWs?.close(); agentWs?.close();
   if (mcpSession) try { await fetch(base + '/mcp', { method: 'DELETE', headers: { authorization: `Bearer ${agent}`, 'mcp-session-id': mcpSession, 'mcp-protocol-version': protocol }, signal: AbortSignal.timeout(5000) }); } catch {}
 }
 console.log(`${passed} pass, ${failed} fail`);

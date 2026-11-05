@@ -61,6 +61,8 @@ services:
   # mux port published on neo. Input arrives over XTest, and neko applies it only
   # for its host, whom the gateway sets from Tandem's control.
   neko:
+    # Let the agent browser win CPU contention; the stream drops frames instead.
+    cpu_shares: 256
     image: ${TANDEM_NEKO_IMAGE:-ghcr.io/m1k1o/neko/base:3.2.0@sha256:587a3389b6b99c8999eb00a768c79205a74647c57cf5b9695a90234a0edaa446}
     network_mode: service:neo
     ipc: service:neo
@@ -93,7 +95,27 @@ services:
       - x11:/tmp/.X11-unix
     restart: unless-stopped
     logging: *logging
+  # Linux delays loopback ACKs 40 ms; Neo's server/browser exchange small writes,
+  # stalling each tool call. Keep quickack set, including after route changes.
+  neo-net:
+    image: ${TANDEM_GATEWAY_IMAGE:-${COMPOSE_PROJECT_NAME:-tandem}-gateway}
+    # Built once by gateway, including with compose up --build. Never pull this tag.
+    pull_policy: never
+    network_mode: service:neo
+    user: '0'
+    entrypoint: ['/bin/sh', '/app/neo-net.sh']
+    healthcheck: {disable: true}
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN]
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      neo: {condition: service_healthy, restart: true}
+    restart: unless-stopped
+    logging: *logging
   gateway:
+    image: ${TANDEM_GATEWAY_IMAGE:-${COMPOSE_PROJECT_NAME:-tandem}-gateway}
+    pull_policy: build
     build: {context: '..', dockerfile: gateway/Dockerfile}
     network_mode: service:neo
     depends_on:
@@ -107,6 +129,7 @@ services:
       TANDEM_PASSWORD: tandem-local-test-password
       TANDEM_AGENT_TOKEN: tandem-local-test-token-00000000000000000000
       TANDEM_ENV: development
+      TANDEM_CDP: ${TANDEM_CDP:-on}
       TANDEM_DATA_DIR: /var/lib/tandem
     volumes: ['${TANDEM_DATA:-${HOME}/.local/share/tandem}/gateway:/var/lib/tandem']
     read_only: true

@@ -132,10 +132,12 @@ test('socket welcome, typed input refusal, take/release, protocol violations, lo
   const ws = new WebSocket(base.replace('http', 'ws') + '/ws', { headers: { cookie, origin } } as any);
   const messages: any[] = []; ws.onmessage = e => messages.push(JSON.parse(String(e.data)));
   await new Promise<void>((resolve, reject) => { ws.onopen = () => resolve(); ws.onerror = () => reject(new Error('ws failed')); });
-  await Bun.sleep(10); expect(messages[0].t).toBe('welcome');
+  // Wait for each reply rather than a fixed sleep; CI runners can be slower than 10 ms.
+  const until = async (ok: () => boolean) => { for (let i = 0; i < 200 && !ok(); i++) await Bun.sleep(10); };
+  await until(() => messages.length > 0); expect(messages[0].t).toBe('welcome');
   ws.send(JSON.stringify({ t: 'hello', viewport: { w: 100, h: 100, dpr: 1 } })); ws.send(JSON.stringify({ t: 'input.text', targetId: 'x', text: 'secret' }));
-  await Bun.sleep(10); expect(messages.some(m => m.code === 'not_in_control')).toBe(true);
-  ws.send(JSON.stringify({ t: 'control.take' })); await Bun.sleep(10); expect(gateway.control.controller).toBe('human');
+  await until(() => messages.some(m => m.code === 'not_in_control')); expect(messages.some(m => m.code === 'not_in_control')).toBe(true);
+  ws.send(JSON.stringify({ t: 'control.take' })); await until(() => gateway.control.controller === 'human'); expect(gateway.control.controller).toBe('human');
   const close = new Promise<number>(resolve => { ws.onclose = e => resolve(e.code); }); const response = await post('/api/logout', {}, { cookie });
   expect(response.status).toBe(200); expect(await close).toBe(4401); expect(gateway.control.controller).toBe('agent'); expect((await fetch(base + '/api/me', { headers: { cookie } })).status).toBe(401);
 });

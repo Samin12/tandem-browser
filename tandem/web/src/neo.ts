@@ -14,7 +14,7 @@ interface RFB extends EventTarget {
   clipboardPasteFrom(text: string): void;
 }
 type RFBConstructor = new (container: HTMLElement, url: string, options: { shared: boolean }) => RFB;
-export type NeoStatus = 'connecting' | 'live' | 'reconnecting';
+export type NeoStatus = 'connecting' | 'live' | 'reconnecting' | 'paused';
 export class NeoView {
   private rfb?: RFB;
   private neko?: NekoView;
@@ -151,9 +151,9 @@ export class NeoView {
       if (this.transport === 'WebRTC') {
         let wasLive = false;
         this.container.replaceChildren();
-        this.neko = new NekoView(this.container, scale, this.sendScreen, live => {
+        this.neko = new NekoView(this.container, scale, this.sendScreen, (live, paused) => {
           if (this.stopped || generation !== this.generation) return;
-          this.ready = live; this.status(live ? 'live' : wasLive ? 'reconnecting' : 'connecting');
+          this.ready = live; this.status(paused ? 'paused' : live ? 'live' : wasLive ? 'reconnecting' : 'connecting');
           wasLive ||= live;
         }, () => this.replayClick(), text => this.writeClipboard(text), () => {
           if (this.stopped || generation !== this.generation) return;
