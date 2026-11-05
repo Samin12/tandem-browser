@@ -277,6 +277,8 @@ export function createGateway(config: Config) {
         }
       },
       message(ws, data) {
+        // The socket limit is sized for CDP screenshots; every other socket keeps the cut-text limit.
+        if (ws.data.kind !== 'cdp' && Buffer.byteLength(data) > CUT_TEXT_LIMIT) { ws.close(1009, 'Message too big'); return; }
         if (ws.data.kind === 'cdp') {
           if (typeof data !== 'string') ws.close(4403, 'Expected CDP JSON'); else ws.data.agentCdp!.message(data);
           return;
