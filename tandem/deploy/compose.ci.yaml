@@ -41,7 +41,9 @@ services:
       # Show BrowserOS neo's own UI (Tandem's Neo view streams it): its dashboard
       # is an extension, and upstream's default list hides vertical tabs and more.
       NEO_DISABLE_BROWSEROS_EXTENSIONS: ${NEO_DISABLE_BROWSEROS_EXTENSIONS:-false}
-      NEO_ARGS: ${NEO_ARGS:---disable-browseros-features=AvatarButton}
+      # Retina-sharp: the engine draws 1x device pixels per CSS pixel; the gateway
+      # tells viewers the same scale (TANDEM_DISPLAY_SCALE) so they size the screen to match.
+      NEO_ARGS: ${NEO_ARGS:---disable-browseros-features=AvatarButton --force-device-scale-factor=${TANDEM_DISPLAY_SCALE:-1}}
     volumes:
       - neo-ci:/data
       - ./policies/tandem-restore.json:/etc/chromium/policies/managed/tandem-restore.json:ro
@@ -53,6 +55,7 @@ services:
     depends_on:
       neo: {condition: service_healthy, restart: true}
     environment:
+      TANDEM_DISPLAY_SCALE: ${TANDEM_DISPLAY_SCALE:-1}
       TANDEM_PUBLIC_ORIGIN: http://127.0.0.1:8790
       TANDEM_PASSWORD: tandem-local-test-password
       TANDEM_AGENT_TOKEN: tandem-local-test-token-00000000000000000000

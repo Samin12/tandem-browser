@@ -34,13 +34,15 @@ services:
     stop_grace_period: 45s
     restart: unless-stopped
     environment:
-      NEO_SCREEN: ${NEO_SCREEN:-1600x1000}
+      NEO_SCREEN: ${NEO_SCREEN:-3200x2000}
       PUID: '1000'
       PGID: '1000'
       # Show BrowserOS neo's own UI (Tandem's Neo view streams it): its dashboard
       # is an extension, and upstream's default list hides vertical tabs and more.
       NEO_DISABLE_BROWSEROS_EXTENSIONS: ${NEO_DISABLE_BROWSEROS_EXTENSIONS:-false}
-      NEO_ARGS: ${NEO_ARGS:---disable-browseros-features=AvatarButton}
+      # Retina-sharp: the engine draws 2x device pixels per CSS pixel; the gateway
+      # tells viewers the same scale (TANDEM_DISPLAY_SCALE) so they size the screen to match.
+      NEO_ARGS: ${NEO_ARGS:---disable-browseros-features=AvatarButton --force-device-scale-factor=${TANDEM_DISPLAY_SCALE:-2}}
     volumes:
       - ${TANDEM_DATA:-/var/lib/tandem}/neo:/data
       - ./policies/tandem-restore.json:/etc/chromium/policies/managed/tandem-restore.json:ro
@@ -53,6 +55,7 @@ services:
       neo: {condition: service_healthy, restart: true}
     env_file: .env
     environment:
+      TANDEM_DISPLAY_SCALE: ${TANDEM_DISPLAY_SCALE:-2}
       TANDEM_ENV: production
       TANDEM_DATA_DIR: /var/lib/tandem
     volumes: ['${TANDEM_DATA:-/var/lib/tandem}/gateway:/var/lib/tandem']

@@ -119,7 +119,7 @@ export function createGateway(config: Config) {
     }
     if (path.startsWith('/api/')) {
       if (!session) return fail('unauthorized', 401);
-      if (path === '/api/me' && req.method === 'GET') return Response.json({ user: 'owner', sessionId: session.id, expiresAt: session.expiresAt, totp: !!config.totpSecret });
+      if (path === '/api/me' && req.method === 'GET') return Response.json({ user: 'owner', sessionId: session.id, expiresAt: session.expiresAt, totp: !!config.totpSecret, displayScale: config.displayScale });
       if (path === '/api/audit' && req.method === 'GET') return Response.json(audit.tail(Number(url.searchParams.get('limit')) || 200));
       if (path === '/api/logout' && req.method === 'POST') {
         sessions.revoke(session.id); audit.write('human', 'logout', {}, { sessionId: session.id });

@@ -4,7 +4,7 @@ import type { KeyStroke } from './neo-input';
 import type { Control } from './types';
 interface RFB extends EventTarget {
   // Compatibility surface for the engine's pinned noVNC 1.3 module.
-  _viewOnly: boolean; _requestRemoteResize(): void;
+  _viewOnly: boolean; _requestRemoteResize(): void; _screenSize(): { w: number; h: number };
   scaleViewport: boolean; resizeSession: boolean; viewOnly: boolean; focusOnClick: boolean;
   background: string; qualityLevel: number; compressionLevel: number;
   disconnect(): void; focus(): void; sendKey(keysym: number, code: string, down: boolean): void;
@@ -110,16 +110,18 @@ export class NeoView {
       if (this.stopped || generation !== this.generation) return;
       if (auth.status === 401) { location.assign('/login'); return; }
       if (!auth.ok) throw new Error('Connection unavailable');
+      const me = await auth.json().catch(() => ({})) as { displayScale?: unknown };
+      const scale = typeof me.displayScale === 'number' && me.displayScale >= 1 && me.displayScale <= 3 ? me.displayScale : 1;
       // A runtime specifier keeps the engine's noVNC ES modules out of our bundle.
       const path = '/desktop/core/' + 'rfb.js';
       const { default: RFB } = await import(/* @vite-ignore */ path) as { default: RFBConstructor };
       if (this.stopped || generation !== this.generation) return;
       this.container.replaceChildren();
       const rfb = this.rfb = new RFB(this.container, `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/desktop/websockify`, { shared: true });
-      enableViewerResize(rfb);
+      enableViewerResize(rfb, scale);
       rfb.scaleViewport = true; rfb.resizeSession = true; rfb.focusOnClick = true;
       rfb.viewOnly = viewOnly(this.control, this.viewerConnected);
-      rfb.background = this.background; rfb.qualityLevel = 6; rfb.compressionLevel = 2;
+      rfb.background = this.background; rfb.qualityLevel = 8; rfb.compressionLevel = 2;
       rfb.addEventListener('connect', () => {
         if (this.stopped || this.rfb !== rfb) return;
         this.ready = true; this.attempt = 0; this.status('live');
