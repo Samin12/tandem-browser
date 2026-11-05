@@ -4,6 +4,7 @@ import { join } from 'node:path';
 type Actor = 'human' | 'agent' | 'system';
 export interface AuditEntry { ts: string; actor: Actor; sessionId?: string; ip?: string; event: string; detail: Record<string, unknown> }
 const allowed: Record<string, string[]> = {
+  'cdp.connect': [], 'cdp.disconnect': ['durationMs', 'messages', 'held', 'rejected', 'topMethods'],
   'login.ok': [], 'login.fail': [], logout: [],
   'control.take': [], 'control.release': [], 'control.auto_release': [],
   'tab.new': ['targetId', 'origin'], 'tab.close': ['targetId'], 'tab.activate': ['targetId'], 'nav.go': ['targetId', 'origin'],
@@ -23,6 +24,8 @@ export class Audit {
       if (key === 'origin' && typeof value === 'string') safe[key] = urlOrigin(value);
       else if ((key === 'name' || key === 'targetId') && typeof value === 'string' && /^[\w.:-]{1,200}$/.test(value)) safe[key] = value;
       else if (key === 'heldMs' && typeof value === 'number') safe[key] = Math.max(0, Math.round(value));
+      else if (['durationMs', 'messages', 'held', 'rejected'].includes(key) && typeof value === 'number' && Number.isFinite(value)) safe[key] = Math.max(0, Math.round(value));
+      else if (key === 'topMethods' && Array.isArray(value)) safe[key] = value.slice(0, 10).filter(v => v && typeof v.method === 'string' && /^[A-Za-z]+(?:\.[A-Za-z]+)?$/.test(v.method) && v.method.length <= 100 && Number.isSafeInteger(v.count) && v.count > 0).map(v => ({ method: v.method, count: v.count }));
       else if (key === 'outcome' && ['ok', 'error', 'timeout', 'cancelled'].includes(String(value))) safe[key] = value;
     }
     const entry: AuditEntry = { ts: new Date().toISOString(), actor, ...context, event, detail: safe };

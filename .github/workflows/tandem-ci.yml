@@ -66,6 +66,7 @@ jobs:
           docker run --rm --network container:tandem-ci-neo-1 \
             -v "$PWD:/repo" -w /repo/tandem/gateway \
             -e TANDEM_URL=http://127.0.0.1:8790 -e TANDEM_ORIGIN=http://127.0.0.1:8790 \
+            -e TANDEM_TEST_NEKO=1 \
             -e TANDEM_TEST_PASSWORD=tandem-local-test-password \
             -e TANDEM_AGENT_TOKEN=tandem-local-test-token-00000000000000000000 \
             oven/bun:1.3.14 sh -c 'bun install --frozen-lockfile && bun run e2e'

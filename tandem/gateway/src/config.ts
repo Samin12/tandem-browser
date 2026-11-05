@@ -4,7 +4,7 @@ import { decodeBase32 } from './security';
 export interface Config {
   hostname: string; port: number; origins: string[]; production: boolean;
   passwordHash: string; totpSecret?: string; agentToken: string; dataDir: string;
-  idleMs: number; maxMs: number; holdMs: number; displayScale: number; cdpUrl: string;
+  idleMs: number; maxMs: number; holdMs: number; displayScale: number; cdpUrl: string; agentCdp: boolean;
   mcpUrl: string; novncUrl: string; nekoUrl?: string; nekoUserPassword?: string; nekoApiToken?: string; publicDir: string; brandFile: string;
 }
 
@@ -47,6 +47,7 @@ export async function loadConfig(env: Record<string, string | undefined> = proce
     const url = new URL(endpoint('TANDEM_NEKO_URL', ''));
     if (url.pathname !== '/' || url.search) fail('TANDEM_NEKO_URL', 'expected an http(s) origin without a path or query');
   }
+  if (!['on', 'off'].includes(env.TANDEM_CDP ?? 'on')) fail('TANDEM_CDP', 'expected on or off');
   const listen = /^(\[[\da-fA-F:]+\]|[^:]+):(\d+)$/.exec(env.TANDEM_LISTEN ?? '0.0.0.0:8790');
   if (!listen || Number(listen[2]) < 1 || Number(listen[2]) > 65535) fail('TANDEM_LISTEN', 'expected host:port (1–65535)');
   return {
@@ -58,6 +59,7 @@ export async function loadConfig(env: Record<string, string | undefined> = proce
     holdMs: positive('TANDEM_AGENT_HOLD_SECONDS', 120) * 1000,
     // Must match the engine's --force-device-scale-factor (compose passes both from one value).
     displayScale: Math.min(3, positive('TANDEM_DISPLAY_SCALE', 1)),
+    agentCdp: env.TANDEM_CDP !== 'off',
     cdpUrl: endpoint('TANDEM_CDP_URL', 'http://127.0.0.1:9110'),
     mcpUrl: endpoint('TANDEM_NEO_MCP_URL', 'http://127.0.0.1:9010/mcp'),
     nekoUrl: env.TANDEM_NEKO_URL || undefined, nekoUserPassword: env.TANDEM_NEKO_USER_PASSWORD, nekoApiToken: env.TANDEM_NEKO_API_TOKEN,

@@ -13,10 +13,11 @@ import { McpProxy } from './mcp';
 import { parkPointer } from './pointer';
 import { RfbFilter, CUT_TEXT_LIMIT } from './rfb';
 import { Follow } from './follow';
+import { AgentCdpProxy, agentAuthorized, cdpRoute, CDP_BYTES, type AgentCdpConnection } from './agent-cdp';
 import { Neko, nekoRoute } from './neko';
 
 export const VERSION = '0.1.0';
-interface SocketData { kind: 'viewer' | 'desktop' | 'neko'; sessionId: string; hello: boolean; viewport: { w: number; h: number; dpr: number }; targetId?: string; upstream?: WebSocket; rfb?: RfbFilter; queue: Promise<void>; openedAt: number }
+interface SocketData { kind: 'viewer' | 'desktop' | 'neko' | 'cdp'; sessionId: string; agentCdp?: AgentCdpConnection; cdpPath?: string; hello: boolean; viewport: { w: number; h: number; dpr: number }; targetId?: string; upstream?: WebSocket; rfb?: RfbFilter; queue: Promise<void>; openedAt: number }
 type Socket = ServerWebSocket<SocketData>;
 class NotInControl extends Error {}
 export function createGateway(config: Config) {
@@ -25,6 +26,7 @@ export function createGateway(config: Config) {
   const mcp = new McpProxy(config, control, audit, cdp), limiter = new RateLimit();
   const viewers = new Set<Socket>(), desktops = new Set<Socket>(), follow = new Follow(cdp, control);
   const neko = new Neko(config, sessions, control);
+  const agentCdp = new AgentCdpProxy(config, control, audit, cdp);
   const loginQueues = new Map<string, Promise<void>>();
   let brand: Record<string, unknown>;
   try { brand = JSON.parse(readFileSync(config.brandFile, 'utf8')); if (!brand || typeof brand !== 'object' || Array.isArray(brand)) throw 0; }
@@ -55,6 +57,7 @@ export function createGateway(config: Config) {
   const secureResponse = (path: string, response: Response) => {
     const headers = new Headers(response.headers);
     for (const [key, value] of securityHeaders(path)) headers.set(key, value);
+    if (path === '/cdp' || path.startsWith('/cdp/')) headers.set('cache-control', 'no-store');
     return new Response(response.body, { status: response.status, headers });
   };
   const requireSession = (req: Request) => req.headers.has('authorization') ? null : sessions.fromRequest(req);
@@ -78,6 +81,21 @@ export function createGateway(config: Config) {
   }
   async function route(req: Request, server: Server<SocketData>): Promise<Response | undefined> {
     const url = new URL(req.url), path = url.pathname;
+    if (path === '/cdp' || path.startsWith('/cdp/')) {
+      if (!config.agentCdp) return fail('not_found', 404);
+      const target = cdpRoute(path);
+      if (!agentAuthorized(req, config.agentToken, target?.token)) return fail('unauthorized', 401);
+      if (!target || req.method !== 'GET') return fail('not_found', 404);
+      if (!target.socket) return agentCdp.discovery(target.path, target.token);
+      if (req.headers.get('upgrade')?.toLowerCase() !== 'websocket') return fail('not_found', 404);
+      if (!agentCdp.reserve()) return fail('too_many_connections', 429);
+      let upstream: WebSocket;
+      try { upstream = await agentCdp.socket(target.path); }
+      catch { agentCdp.release(); return fail('upstream_unavailable', 502); }
+      if (server.upgrade(req, { headers: securityHeaders(path), data: { kind: 'cdp', sessionId: '', upstream, cdpPath: target.path,
+        hello: false, viewport: { w: 0, h: 0, dpr: 1 }, queue: Promise.resolve(), openedAt: Date.now() } })) return;
+      upstream.close(); agentCdp.release(); return fail('upgrade_failed', 400);
+    }
     if (path === '/mcp') {
       const header = req.headers.get('authorization') ?? '';
       if (!header.startsWith('Bearer ') || !constantEqual(header.slice(7), config.agentToken)) return fail('unauthorized', 401);
@@ -231,8 +249,9 @@ export function createGateway(config: Config) {
       catch { log('request.failed', { method: req.method }); return secureResponse(path, fail('internal_error', 500)); }
     },
     websocket: {
-      maxPayloadLength: CUT_TEXT_LIMIT, idleTimeout: 120, backpressureLimit: 4 * 1024 * 1024, closeOnBackpressureLimit: false,
+      maxPayloadLength: Math.max(CUT_TEXT_LIMIT, CDP_BYTES), idleTimeout: 120, backpressureLimit: CDP_BYTES, closeOnBackpressureLimit: false,
       open(ws) {
+        if (ws.data.kind === 'cdp') { agentCdp.attach(ws, ws.data.cdpPath!); return; }
         control.connected(ws.data.sessionId);
         if (ws.data.kind === 'neko') { neko.attach(ws); return; }
         if (ws.data.kind === 'viewer') {
@@ -258,6 +277,10 @@ export function createGateway(config: Config) {
         }
       },
       message(ws, data) {
+        if (ws.data.kind === 'cdp') {
+          if (typeof data !== 'string') ws.close(4403, 'Expected CDP JSON'); else ws.data.agentCdp!.message(data);
+          return;
+        }
         if (ws.data.kind === 'neko') { neko.message(ws, data); return; }
         if (ws.data.kind === 'desktop') { void message(ws, data).catch(() => ws.close(4403, 'Protocol violation')); return; }
         // Control transitions must not wait behind an outstanding browser command.
@@ -269,7 +292,7 @@ export function createGateway(config: Config) {
         }
         ws.data.queue = ws.data.queue.then(() => message(ws, data)).catch(() => ws.close(4403, 'Protocol violation'));
       },
-      close(ws) { if (ws.data.kind === 'neko') neko.detach(ws); follow.set(ws, false); viewers.delete(ws); desktops.delete(ws); screencasts.unsubscribe(ws); ws.data.upstream?.close(); control.disconnected(ws.data.sessionId); },
+      close(ws) { if (ws.data.kind === 'cdp') { agentCdp.detach(ws); return; } if (ws.data.kind === 'neko') neko.detach(ws); follow.set(ws, false); viewers.delete(ws); desktops.delete(ws); screencasts.unsubscribe(ws); ws.data.upstream?.close(); control.disconnected(ws.data.sessionId); },
     },
   });
   const timer = setInterval(() => {
@@ -282,7 +305,7 @@ export function createGateway(config: Config) {
   cdp.start(); mcp.start(); neko.start(); log('gateway.started', { port: server.port! });
   if (control.controller === 'agent') void parkPointer();
   return { server, sessions, control, cdp, mcp, audit, neko, async close() {
-    clearInterval(timer); clearTimeout(tabsTimer); follow.close(); mcp.close(); screencasts.close(); cdp.close();
+    clearInterval(timer); clearTimeout(tabsTimer); follow.close(); agentCdp.close(); mcp.close(); screencasts.close(); cdp.close();
     await neko.close();
     for (const ws of [...viewers, ...desktops]) ws.terminate();
     // Bun 1.3 can leave stop() pending after a completed WebSocket close handshake.
