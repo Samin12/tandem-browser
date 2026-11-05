@@ -1,6 +1,6 @@
 import type { KeyStroke } from './neo-input';
 export type NeoTransport = 'WebRTC' | 'VNC';
-// A page load gets one WebRTC attempt. Reconnecting never resets the deadline.
+// Unplanned reconnects retain their deadline; an intentional visibility pause starts a new guard.
 export class TransportFallback {
   private firstFrame = false;
   private lostAt?: number;
@@ -38,4 +38,25 @@ export function replayNekoClick(input: { move(x: number, y: number): void; butto
   if (x < 0 || y < 0 || x >= screen.width || y >= screen.height) return;
   input.move(Math.round(x), Math.round(y));
   input.button(click.button + 1, true); input.button(click.button + 1, false);
+}
+
+export const HIDDEN_PAUSE_MS = 15000;
+export interface PauseClock {
+  setTimeout(callback: () => void, ms: number): ReturnType<typeof setTimeout>;
+  clearTimeout(timer: ReturnType<typeof setTimeout>): void;
+}
+export class VisibilityPause {
+  private timer?: ReturnType<typeof setTimeout>;
+  private hidden = false;
+  private paused = false;
+  constructor(private changed: (paused: boolean) => void, private clock: PauseClock = { setTimeout: (run, ms) => setTimeout(run, ms), clearTimeout: timer => clearTimeout(timer) }) {}
+  visibility(hidden: boolean) {
+    if (hidden === this.hidden) return;
+    this.hidden = hidden;
+    if (this.timer !== undefined) this.clock.clearTimeout(this.timer);
+    this.timer = undefined;
+    if (hidden) this.timer = this.clock.setTimeout(() => { this.timer = undefined; this.paused = true; this.changed(true); }, HIDDEN_PAUSE_MS);
+    else if (this.paused) { this.paused = false; this.changed(false); }
+  }
+  stop() { if (this.timer !== undefined) this.clock.clearTimeout(this.timer); }
 }

@@ -131,6 +131,19 @@ test('control gives the human login, replacing holder and reset follow Tandem, r
   gateway.control.release(b.session.id); await until(() => host === undefined);
   expect(records.filter(r => r.path.startsWith('/api/room/control/')).every(r => r.auth === `Bearer ${admin}`)).toBe(true);
 });
+test('visibility-style neko disconnect keeps Tandem control and reconnect restores the human host', async () => {
+  const { token, session } = gateway.sessions.create();
+  const coordinator = await socket('/ws', token);
+  coordinator.ws.send(JSON.stringify({ t: 'hello', viewport: { w: 800, h: 600, dpr: 1 } }));
+  gateway.control.take(session.id);
+  const identity = await (await get('/neko/api/whoami', token)).json() as any;
+  const first = await socket('/neko/api/ws', token); await until(() => host === identity.id);
+  first.ws.close(); await first.closed; host = undefined;
+  expect(gateway.control.holds(session.id)).toBe(true);
+  const resumed = await socket('/neko/api/ws', token); await until(() => host === identity.id);
+  expect(gateway.control.holds(session.id)).toBe(true);
+  resumed.ws.close(); coordinator.ws.close(); gateway.control.release(session.id);
+});
 test('rapid take/release during lazy login cannot leave a stale human host', async () => {
   const { session } = gateway.sessions.create(); delayLogin = 100;
   gateway.control.take(session.id); await Bun.sleep(20); gateway.control.release(session.id);

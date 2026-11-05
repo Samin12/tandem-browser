@@ -1,6 +1,6 @@
 import { NekoClient, WebRTCTransport, mount } from '@m1k1o/neko';
 import { remoteSize } from './neo-resize';
-import { replayNekoClick, sendNekoKeys, TransportFallback } from './neo-transport';
+import { replayNekoClick, sendNekoKeys, TransportFallback, VisibilityPause } from './neo-transport';
 import type { Click } from './neo-transport';
 import type { KeyStroke } from './neo-input';
 
@@ -13,13 +13,15 @@ export class NekoView {
   private cleanup: (() => void)[] = [];
   private stopped = false;
   private allowed = false;
+  private paused = false;
+  private cancelFrame = () => {};
   private frame = false;
   private mediaConnected = false;
   private guard = new TransportFallback(Date.now());
   private screenTimer?: ReturnType<typeof setTimeout>;
   constructor(private container: HTMLElement, private scale: number,
     private sendScreen: (message: { t: 'screen'; w: number; h: number }) => void,
-    private state: (live: boolean) => void, private controlChanged: () => void,
+    private state: (live: boolean, paused?: boolean) => void, private controlChanged: () => void,
     private clipboard: (text: string) => void, private fallback: () => void) {
     const client = this.client;
     // bind() is public on DataChannelInput; wait for open before replaying the first click.
@@ -54,20 +56,24 @@ export class NekoView {
     }));
     this.cleanup.push(client.events.on('connection.status', () => { this.connection(); this.resize(); }));
     this.cleanup.push(client.events.on('room.clipboard.updated', text => this.clipboard(text)));
-    const video = client.transport.element as HTMLVideoElement;
-    // A decoded frame, rather than a socket or ICE connection, ends the initial timeout.
-    const received = () => { if (!this.stopped) { this.frame = true; this.guard.frame(); this.connection(); this.controlChanged(); } };
-    if (video.requestVideoFrameCallback) {
-      const callback = video.requestVideoFrameCallback(received);
-      this.cleanup.push(() => video.cancelVideoFrameCallback(callback));
-    } else {
-      video.addEventListener('loadeddata', received, { once: true });
-      this.cleanup.push(() => video.removeEventListener('loadeddata', received));
-    }
+    this.watchFrame();
+    const visibility = new VisibilityPause(paused => {
+      this.paused = paused; this.frame = false; this.mediaConnected = false; this.inputOpen = false;
+      this.cancelFrame();
+      if (paused) { client.disconnect(); this.state(false, true); }
+      else {
+        this.guard = new TransportFallback(Date.now()); this.watchFrame(); this.state(false);
+        client.connect(); this.resize();
+      }
+      this.controlChanged();
+    });
+    const changed = () => visibility.visibility(document.visibilityState === 'hidden');
+    document.addEventListener('visibilitychange', changed); changed();
+    this.cleanup.push(() => { visibility.stop(); document.removeEventListener('visibilitychange', changed); this.cancelFrame(); });
     const observer = new ResizeObserver(() => this.resize()); observer.observe(container);
     this.cleanup.push(() => observer.disconnect());
     const timer = setInterval(() => {
-      if (this.guard.expired(Date.now())) this.fallback();
+      if (!this.paused && this.guard.expired(Date.now())) this.fallback();
     }, 100);
     this.cleanup.push(() => clearInterval(timer));
     this.resize();
@@ -75,11 +81,26 @@ export class NekoView {
     // socket server-side; no neko login, token or browser-side REST call is needed.
     client.store.setState({ authenticated: true }); client.connect();
   }
+  private watchFrame() {
+    const video = this.client.transport.element as HTMLVideoElement;
+    const received = () => {
+      if (this.stopped || this.paused) return;
+      this.frame = true; this.guard.frame(); this.connection(); this.controlChanged();
+    };
+    if (video.requestVideoFrameCallback) {
+      const callback = video.requestVideoFrameCallback(received);
+      this.cancelFrame = () => video.cancelVideoFrameCallback(callback);
+    } else {
+      video.addEventListener('loadeddata', received, { once: true });
+      this.cancelFrame = () => video.removeEventListener('loadeddata', received);
+    }
+  }
   private connection() {
+    if (this.paused) return;
     const live = this.mediaConnected && this.client.state.connection.status === 'connected';
     this.guard.connection(live, Date.now()); this.state(live && this.frame);
   }
-  canInput() { return !this.stopped && this.allowed && this.inputOpen && this.frame && this.mediaConnected && this.client.controlling && this.client.state.connection.status === 'connected'; }
+  canInput() { return !this.stopped && !this.paused && this.allowed && this.inputOpen && this.frame && this.mediaConnected && this.client.controlling && this.client.state.connection.status === 'connected'; }
   setControl(allowed: boolean) {
     this.allowed = allowed;
     if (allowed) this.client.unlock(); else this.client.lock();

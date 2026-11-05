@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { ClickReplay, replayNekoClick, selectTransport, sendNekoKeys, TransportFallback } from '../src/neo-transport';
+import { ClickReplay, replayNekoClick, selectTransport, sendNekoKeys, TransportFallback, VisibilityPause, HIDDEN_PAUSE_MS } from '../src/neo-transport';
 import { commandShortcut, shortcutSequence } from '../src/neo-input';
 import { remoteSize } from '../src/neo-resize';
 
@@ -69,4 +69,49 @@ test('expired, cancelled and letterbox clicks do not reach the remote', () => {
   replayNekoClick({ move: () => events.push('move'), button: () => events.push('button') }, { x: 0, y: 0, button: 2, at: 0 },
     { left: 100, top: 100, width: 500, height: 500 }, { width: 1000, height: 1000 });
   expect(events).toEqual([]);
+});
+
+test('hidden viewers pause after 15 seconds, resume immediately and cancel short hides', () => {
+  let now = 0, sequence = 0;
+  const timers = new Map<number, { at: number; run: () => void }>(), states: boolean[] = [];
+  const advance = (ms: number) => { now += ms; for (const [id, timer] of timers) if (timer.at <= now) { timers.delete(id); timer.run(); } };
+  const pause = new VisibilityPause(value => states.push(value), {
+    setTimeout: (run, ms) => { const id = ++sequence; timers.set(id, { at: now + ms, run }); return id as any; },
+    clearTimeout: id => { timers.delete(id as any); },
+  });
+  pause.visibility(true); advance(HIDDEN_PAUSE_MS - 1); expect(states).toEqual([]);
+  pause.visibility(false); advance(1); expect(states).toEqual([]);
+  pause.visibility(true); advance(HIDDEN_PAUSE_MS); expect(states).toEqual([true]);
+  pause.visibility(true); advance(60000); expect(states).toEqual([true]);
+  pause.visibility(false); expect(states).toEqual([true, false]);
+  pause.visibility(true); pause.stop(); advance(HIDDEN_PAUSE_MS); expect(states).toEqual([true, false]);
+});
+test('an intentional pause suppresses fallback and resume gets a fresh decoded-frame deadline', () => {
+  let now = 0, paused = false, guard = new TransportFallback(now);
+  let fire = () => {};
+  const visibility = new VisibilityPause(value => { paused = value; if (!value) guard = new TransportFallback(now); }, {
+    setTimeout: run => { fire = run; return 1 as any; }, clearTimeout: () => {},
+  });
+  guard.frame(); visibility.visibility(true); now = HIDDEN_PAUSE_MS; fire();
+  now += 100000; expect(!paused && guard.expired(now)).toBe(false);
+  visibility.visibility(false); guard.connection(true, now);
+  expect(guard.expired(now + 7999)).toBe(false); expect(guard.expired(now + 8000)).toBe(true);
+});
+
+test('default visibility clock calls browser timers without an object receiver', () => {
+  const originalSet = globalThis.setTimeout, originalClear = globalThis.clearTimeout;
+  let scheduled = false, cancelled = false;
+  try {
+    globalThis.setTimeout = function(this: unknown) {
+      if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation');
+      scheduled = true; return 1 as any;
+    } as any;
+    globalThis.clearTimeout = function(this: unknown) {
+      if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation');
+      cancelled = true;
+    } as any;
+    const pause = new VisibilityPause(() => {});
+    pause.visibility(true); pause.visibility(false); pause.stop();
+    expect(scheduled).toBe(true); expect(cancelled).toBe(true);
+  } finally { globalThis.setTimeout = originalSet; globalThis.clearTimeout = originalClear; }
 });

@@ -191,10 +191,10 @@ function render() {
 function renderConnection() {
   const live = connected && (view === 'lite' || neoStatus === 'live');
   const retrying = reconnecting || view === 'neo' && neoStatus === 'reconnecting';
-  $('neo-loading').hidden = view !== 'neo' || neoStatus === 'live';
+  $('neo-loading').hidden = view !== 'neo' || ['live', 'paused'].includes(neoStatus);
   $('neo-loading-text').textContent = retrying ? 'Reconnecting…' : 'Connecting to your browser…';
   const liveLabel = view === 'neo' ? `Live · ${neo?.transport ?? 'VNC'}` : 'Live';
-  $('connection').textContent = live ? latency === undefined ? liveLabel : `${liveLabel} · ${latency} ms` : retrying ? 'Reconnecting…' : 'Connecting…';
+  $('connection').textContent = view === 'neo' && neoStatus === 'paused' ? 'Paused' : live ? latency === undefined ? liveLabel : `${liveLabel} · ${latency} ms` : retrying ? 'Reconnecting…' : 'Connecting…';
   $('connection').classList.toggle('live', live);
 }
 function setMode(next: 'watch' | 'agent' | 'manual') {

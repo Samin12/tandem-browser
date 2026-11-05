@@ -55,3 +55,23 @@ signalling API with acknowledgment (or a bounded wait), then Ctrl+V, so explicit
 local text wins over an older remote selection. Authentication uses the already
 verified Tandem session and the gateway's signalling proxy; no neko credentials
 are stored or requested in the browser.
+
+## Hidden-viewer acceptance
+
+`visibility-check.mjs` uses the same headless Playwright installation and engine
+namespace. It injects visibility transitions, verifies a short hide retains the
+socket, a 15-second hide disconnects neko, an 11-second intentional pause cannot
+fall back to VNC, and visible resumes decoding with the human still in control
+and restored as neko host. It also checks for browser runtime exceptions. The
+headless test disables Chrome's mDNS host-candidate obfuscation because multicast
+name discovery is unreliable between the test container and neko after a peer
+reconnect; production viewer settings are unchanged.
+
+With the disposable `tagentspeed` stack running, from the repository root:
+
+```sh
+docker run --rm --name tagentspeed-headless --network container:tagentspeed-neo-1 \
+  -v "$PWD/tandem/web/dev:/scripts:ro" \
+  -v "$HOME/.cache/neko-research/pwnode:/work:ro" -w /work \
+  mcr.microsoft.com/playwright:v1.65.0-noble node /scripts/visibility-check.mjs
+```
