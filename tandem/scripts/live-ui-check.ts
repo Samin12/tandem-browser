@@ -89,7 +89,7 @@ try {
   if (!clicked) throw new Error('Manual button not found');
   await until(() => js(`/You're driving/i.test(document.body.innerText)`), 'manual banner');
   pass('took manual control from the UI');
-  const held = mcp('tools/call', { name: 'navigate', arguments: { action: 'url', url: 'https://example.com' } });
+  const held = mcp('tools/call', { name: 'tabs', arguments: { action: 'list' } });
   await js(`(() => { const i = document.querySelector('#address'); i.focus(); i.value = ${JSON.stringify(humanUrl)}; i.dispatchEvent(new Event('input', {bubbles:true})); document.querySelector('#address-form').requestSubmit(); return true; })()`);
   await delay(7000);
   await shot('you-driving.png');

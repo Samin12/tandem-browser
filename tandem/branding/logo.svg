@@ -1,7 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Tandem Browser">
-  <rect width="512" height="512" rx="112" fill="#C96442"/>
-  <circle cx="176" cy="300" r="84" fill="none" stroke="#FAF9F5" stroke-width="36"/>
-  <circle cx="336" cy="300" r="84" fill="none" stroke="#FAF9F5" stroke-width="36" stroke-dasharray="40 22"/>
-  <path d="M176 300 L256 164 L336 300" fill="none" stroke="#FAF9F5" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="256" cy="164" r="26" fill="#FAF9F5"/>
+  <defs>
+    <linearGradient id="clay" x1="40" y1="24" x2="472" y2="488" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E08A66"/>
+      <stop offset="1" stop-color="#B44E2B"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#clay)"/>
+  <!-- The agent: an outlined pointer with a spark, riding behind. -->
+  <path d="M143 112 L143 296.8 L190.3 255.9 L221.8 327.3 L254.3 312.6 L222.8 243.3 L281.6 243.3 Z" fill="none" stroke="#FAF9F5" stroke-width="17" stroke-linejoin="round"/>
+  <path d="M100 104 Q104.5 133.5 134 138 Q104.5 142.5 100 172 Q95.5 142.5 66 138 Q95.5 133.5 100 104 Z" fill="#FAF9F5"/>
+  <!-- The person: a solid pointer in front, cut out of the one behind it. -->
+  <path d="M231 184 L231 368.8 L278.3 327.9 L309.8 399.3 L342.3 384.6 L310.8 315.3 L369.6 315.3 Z" fill="#FAF9F5" stroke="url(#clay)" stroke-width="26" stroke-linejoin="round" paint-order="stroke"/>
 </svg>
