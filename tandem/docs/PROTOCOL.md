@@ -17,9 +17,11 @@ depends on it.
                                               └─▶ 127.0.0.1:6080  Neo noVNC        (never published)
 ```
 
-The gateway is the only thing that can reach the browser. It runs with
+The gateway is the only external entry point to the browser. It runs with
 `network_mode: service:neo`, so Neo's loopback ports are its loopback ports.
-Only port 8790 leaves the namespace, and only to 127.0.0.1 on the host and to Caddy.
+Trusted `neko` and `neo-net` sidecars share this namespace too. Raw engine
+ports are never published; gateway 8790 is reachable on host loopback and by
+the TLS proxy, and neko's media mux is published separately.
 
 ## Gateway environment
 
@@ -30,12 +32,13 @@ Only port 8790 leaves the namespace, and only to 127.0.0.1 on the host and to Ca
 | `TANDEM_PASSWORD_HASH` | (required unless `TANDEM_PASSWORD`) | Argon2id hash from `bun run hash-password` (Bun.password) |
 | `TANDEM_PASSWORD` | unset | Plain password, dev only; hashed in memory at startup. Refused when `TANDEM_ENV=production`. |
 | `TANDEM_TOTP_SECRET` | unset | Base32 secret. When set, login also needs a 6-digit code (RFC 6238, SHA1, 30 s, ±1 step). |
-| `TANDEM_AGENT_TOKEN` | (required) | Bearer token for `/mcp`. At least 32 chars. Never accepted for viewer routes. |
+| `TANDEM_AGENT_TOKEN` | (required) | Agent credential for `/mcp` and `/cdp`. At least 32 chars. Never accepted for viewer routes. |
 | `TANDEM_ENV` | `production` | `production` or `development` (development allows `TANDEM_PASSWORD` and non-Secure cookies on http origins) |
 | `TANDEM_DATA_DIR` | `/var/lib/tandem` | `sessions.sqlite`, `audit.log` (JSONL), `state.json` (control mode) |
 | `TANDEM_SESSION_IDLE_HOURS` | `12` | Viewer session idle timeout |
 | `TANDEM_SESSION_MAX_HOURS` | `72` | Absolute session lifetime |
-| `TANDEM_AGENT_HOLD_SECONDS` | `120` | How long a mutating MCP call waits while a human has control before it fails |
+| `TANDEM_AGENT_HOLD_SECONDS` | `120` | How long a mutating MCP call or CDP command waits during human control |
+| `TANDEM_CDP` | `on` | `off` disables agent CDP routes (404) |
 | `TANDEM_CDP_URL` | `http://127.0.0.1:9110` | Neo's CDP endpoint (internal) |
 | `TANDEM_NEO_MCP_URL` | `http://127.0.0.1:9010/mcp` | Neo's MCP endpoint (internal) |
 | `TANDEM_NOVNC_URL` | `http://127.0.0.1:6080` | Neo's noVNC (internal) |
@@ -61,6 +64,7 @@ non-GET JSON requests must also send `X-Tandem: 1`.
 | `GET /ws` (upgrade) | session + Origin | Viewer socket, below |
 | `GET /desktop/*` | session | Neo's own noVNC files, proxied. The Neo view imports `/desktop/core/rfb.js` from here, so the client always matches the engine's noVNC. |
 | `GET /desktop/websockify` (upgrade) | session + Origin | The engine's VNC stream. Any signed-in viewer may watch; the gateway drops keyboard, mouse and clipboard messages from sessions that don't hold control (see "Neo view"). |
+| `GET /cdp[/TOKEN]/{json,devtools}/*` | Agent token in path or bearer header | Agent CDP discovery and sockets (see below) |
 | `POST /mcp`, `GET /mcp`, `DELETE /mcp` | `Authorization: Bearer $TANDEM_AGENT_TOKEN` | Neo MCP proxy with control gating |
 
 Responses on every route: `Cache-Control: no-store` for `/api/*`,
@@ -335,3 +339,51 @@ mcp_servers:
 
 The `/mcp` route streams Neo's responses (SSE) unchanged and passes
 `mcp-session-id` and `mcp-protocol-version` headers both ways.
+
+## Agent CDP endpoint
+
+`GET /cdp/TOKEN/json/version`, `/json` and `/json/list` expose Chromium discovery
+with debugger URLs rewritten to the first `TANDEM_PUBLIC_ORIGIN` (WSS for HTTPS,
+WS for HTTP). Discovery also accepts a trailing slash for Playwright. Connect to `/cdp/TOKEN/devtools/browser/ID` or
+`/cdp/TOKEN/devtools/page/ID`. The same routes without `/TOKEN` accept
+`Authorization: Bearer TOKEN`; those rewritten URLs also require the header.
+Authentication failures match MCP's 401 response. All other CDP HTTP routes,
+including new/close/activate/protocol and frontend files, return 404. Set
+`TANDEM_CDP=off` to disable this surface. At most eight CDP sockets may connect.
+Frames up to 32 MiB are supported; slow consumers are disconnected rather than
+accumulating unbounded data.
+
+While a human holds control, commands wait in arrival order for up to
+`TANDEM_AGENT_HOLD_SECONDS`. Read-only commands bypass the queue: Target
+getTargets/getTargetInfo/getBrowserContexts/setDiscoverTargets/setAutoAttach/
+attachToTarget/detachFromTarget; Browser.getVersion; any domain's enable/disable;
+Page captureScreenshot/getLayoutMetrics/getFrameTree/getNavigationHistory;
+DOM getDocument/describeNode/getBoxModel/querySelector/querySelectorAll/
+getOuterHTML/resolveNode; DOMSnapshot.captureSnapshot; Accessibility
+getFullAXTree/getPartialAXTree/queryAXTree; Runtime getProperties/releaseObject/
+releaseObjectGroup. All other commands (including Runtime.evaluate and
+callFunctionOn) wait. Timed-out commands receive `{id, sessionId?, error:{code:
+-32000,message:"Tandem: a person has control of the browser; try again later"}}`
+and never reach Chromium. Browser responses/events always pass. In-flight
+commands finish normally. CDP uses the same agent-busy/activity and Follow paths
+as MCP. Audit events `cdp.connect` and `cdp.disconnect` include duration, message,
+held and rejected counts and top method names, never bodies or credentials.
+
+## Engine scheduling and loopback latency
+
+`neo-net` reuses the gateway image with iproute2 and shares Neo's network
+namespace. It alone runs as root with NET_ADMIN (all other capabilities dropped,
+read-only filesystem, no new privileges). After Neo is healthy it sets quickack
+on IPv4 loopback local routes and ::1 if present (replacing the generated IPv6
+metric-zero route with metric one before removing it), checking every 30 seconds and
+repairing missing flags. Linux delayed ACKs otherwise cost ~40 ms when Neo's
+server and browser exchange small writes. Compose restarts it with the engine.
+The gateway itself retains `cap_drop: [ALL]`.
+
+Neko has `cpu_shares: 256`: under contention the browser gets CPU first and the
+stream drops frames. A viewer hidden continuously for 15 seconds disconnects
+only its neko client so the last listener stops encoding. Visibility resumes it
+immediately, with a fresh first-frame guard; this intentional pause never
+triggers VNC fallback or a connection error. The indicator reads Paused. Tandem's
+control socket stays connected, and the current human gets neko host again on
+signalling reconnect.
