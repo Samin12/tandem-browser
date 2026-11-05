@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Tandem Browser">
+  <rect width="512" height="512" rx="112" fill="#C96442"/>
+  <circle cx="176" cy="300" r="84" fill="none" stroke="#FAF9F5" stroke-width="36"/>
+  <circle cx="336" cy="300" r="84" fill="none" stroke="#FAF9F5" stroke-width="36" stroke-dasharray="40 22"/>
+  <path d="M176 300 L256 164 L336 300" fill="none" stroke="#FAF9F5" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="256" cy="164" r="26" fill="#FAF9F5"/>
+</svg>

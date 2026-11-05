@@ -1,0 +1,27 @@
+{
+  "productName": "Tandem Browser",
+  "shortName": "Tandem",
+  "tagline": "One browser, two drivers: you and your agent.",
+  "description": "An always-on browser that runs on your server. Your AI agent drives it; you watch or take the wheel from any computer.",
+  "appId": "com.saminyasar.tandem",
+  "repository": "https://github.com/Samin12/tandem-browser",
+  "engine": {
+    "name": "BrowserOS neo",
+    "url": "https://github.com/browseros-ai/BrowserOS",
+    "license": "AGPL-3.0"
+  },
+  "agentName": "Hermes",
+  "colors": {
+    "accent": "#C96442",
+    "accentSoft": "#F1DDD3",
+    "background": "#FAF9F5",
+    "surface": "#F0EEE6",
+    "border": "#E3DFD3",
+    "text": "#1F1E1D",
+    "textMuted": "#6B6A65",
+    "agent": "#4A6FA5",
+    "human": "#C96442",
+    "danger": "#B3261E"
+  },
+  "logo": "logo.svg"
+}
