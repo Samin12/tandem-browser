@@ -14,5 +14,9 @@ await Promise.all([
   copyFile(resolve(root, '../branding/brand.json'), resolve(root, 'dist/brand.json')),
   copyFile(resolve(root, '../branding/logo.svg'), resolve(root, 'dist/favicon.svg')),
   copyFile(resolve(root, '../branding/logo.svg'), resolve(root, 'dist/logo.svg')),
+  ...['logo.svg', 'mark.svg', 'app-icon.svg'].flatMap(name => [
+    copyFile(resolve(root, '../branding', name), resolve(root, 'dist/assets', name)),
+    ...(name === 'mark.svg' ? [copyFile(resolve(root, '../branding', name), resolve(root, 'dist', name))] : []),
+  ]),
 ]);
 console.log('Built dist/');

@@ -34,7 +34,7 @@ bun run dist:linux  # x64 AppImage + deb; run on Linux
 ```
 
 All artifacts go to `release/`. Packaging reads `../branding/brand.json` and
-`../branding/logo.svg`; build copies branding and the repository's AGPL license
+`../branding/app-icon.svg`; build copies branding and the repository's AGPL license
 into `dist/`, so installed apps do not depend on the checkout. Electron-builder
 derives platform icons from the PNG. Runtime dependencies are Electron built-ins.
 

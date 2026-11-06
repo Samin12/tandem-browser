@@ -50,6 +50,8 @@ services:
       - x11:/tmp/.X11-unix
       - ${TANDEM_DATA:-${HOME}/.local/share/tandem}/neo:/data
       - ./policies/tandem-restore.json:/etc/chromium/policies/managed/tandem-restore.json:ro
+      - ./policies/tandem-start.json:/etc/chromium/policies/managed/tandem-start.json:ro
+      - ../start/index.html:/opt/tandem/start/index.html:ro
     ports:
       - '127.0.0.1:${TANDEM_PORT:-8790}:8790'
       # WebRTC media for neko (UDP, with TCP as a fallback).

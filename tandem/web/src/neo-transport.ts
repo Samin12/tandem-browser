@@ -16,7 +16,16 @@ export class TransportFallback {
     return this.ended;
   }
 }
-export const selectTransport = (enabled: unknown, fellBack: boolean): NeoTransport => enabled === true && !fellBack ? 'WebRTC' : 'VNC';
+export type StreamPreference = 'smooth' | 'sharp';
+interface StreamStorage { getItem(key: string): string | null; setItem(key: string, value: string): void }
+export function readStream(storage: Pick<StreamStorage, 'getItem'>): StreamPreference {
+  try { return storage.getItem('tandem.stream') === 'sharp' ? 'sharp' : 'smooth'; } catch { return 'smooth'; }
+}
+export function persistStream(stream: StreamPreference, storage: Pick<StreamStorage, 'setItem'>): void {
+  try { storage.setItem('tandem.stream', stream); } catch { /* Optional preference. */ }
+}
+export const selectTransport = (enabled: unknown, fellBack: boolean, stream: StreamPreference = 'smooth'): NeoTransport =>
+  stream === 'smooth' && enabled === true && !fellBack ? 'WebRTC' : 'VNC';
 export function sendNekoKeys(input: { key(keysym: number, down: boolean): void }, sequence: KeyStroke[]) {
   for (const [key, , down] of sequence) input.key(key, down);
 }

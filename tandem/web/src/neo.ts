@@ -1,6 +1,6 @@
 import { NekoView } from './neo-neko';
 import { ClickReplay, selectTransport } from './neo-transport';
-import type { NeoTransport } from './neo-transport';
+import type { NeoTransport, StreamPreference } from './neo-transport';
 import { enableViewerResize } from './neo-resize';
 import { commandShortcut, macKeyRoute, macKeySequence, shortcutSequence, viewOnly } from './neo-input';
 import type { KeyStroke } from './neo-input';
@@ -33,7 +33,7 @@ export class NeoView {
   private pendingClick = new ClickReplay();
   constructor(private container: HTMLElement, private mac: boolean, private background: string,
     private status: (status: NeoStatus) => void, private notify: (text: string, takeControl?: boolean) => void,
-    private takeControl: () => void, private sendScreen: (message: { t: 'screen'; w: number; h: number }) => void) {
+    private takeControl: () => void, private sendScreen: (message: { t: 'screen'; w: number; h: number }) => void, private stream: StreamPreference = 'smooth') {
     // Clicking the page grabs the wheel: take control, then replay that click once input is allowed.
     container.addEventListener('pointerdown', event => {
       if (this.canInput() || !this.ready) return;
@@ -61,6 +61,12 @@ export class NeoView {
   stop() {
     this.stopped = true; this.generation++; this.ready = false; clearTimeout(this.retry); clearTimeout(this.pasteTimer);
     this.pasteVersion++; this.pendingClick.clear(); this.neko?.stop(); this.neko = undefined; this.rfb?.disconnect(); this.rfb = undefined; this.container.replaceChildren();
+  }
+  setStream(stream: StreamPreference) {
+    if (stream === this.stream) return;
+    const running = !this.stopped;
+    this.stop(); this.stream = stream; this.fellBack = false;
+    if (running) this.start();
   }
   setControl(control: Control, connected: boolean) {
     const wasConnected = this.viewerConnected;
@@ -147,7 +153,7 @@ export class NeoView {
       if (!auth.ok) throw new Error('Connection unavailable');
       const me = await auth.json().catch(() => ({})) as { displayScale?: unknown; webrtc?: unknown };
       const scale = typeof me.displayScale === 'number' && me.displayScale >= 1 && me.displayScale <= 3 ? me.displayScale : 1;
-      this.transport = selectTransport(me.webrtc, this.fellBack);
+      this.transport = selectTransport(me.webrtc, this.fellBack, this.stream);
       if (this.transport === 'WebRTC') {
         let wasLive = false;
         this.container.replaceChildren();

@@ -32,7 +32,7 @@ if (page === 'about') {
   document.title = `About ${brand.productName}`;
   api.config().then(config => { document.querySelector('#version').textContent = `Version ${config.version}`; });
   document.querySelector('#tagline').textContent = brand.tagline;
-  document.querySelector('#attribution').textContent = `Based on ${brand.engine.name} (${brand.engine.license})`;
+  document.querySelector('#attribution').textContent = `Built on ${brand.engine.name} (${brand.engine.license})`;
   document.querySelector('#repository').textContent = brand.repository;
   const link = document.querySelector('#source');
   link.href = brand.repository;

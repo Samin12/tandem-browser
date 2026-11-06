@@ -141,3 +141,60 @@ same assertions pass on native Linux filesystem storage.
   specified source-path/breaking rules. The sync token also needs Issues write
   for blocker issues/labels. force_image_check is accepted but image resolution
   is already unconditional on every run.
+
+## Tandem start page — isolated VPS acceptance
+
+Tested the already-pulled pinned engine `dc004fe28e9a` (the image digest in
+`neo-image.env`) on the VPS with a single disposable container named
+`tandem-ntp-test-1105`. No published ports, a separate fresh ephemeral profile,
+1 CPU limit, 512 MiB shared memory, and read-only page/policy mounts. Used
+`NEO_DISABLE_BROWSEROS_EXTENSIONS=false` and
+`NEO_ARGS=--disable-browseros-features=AvatarButton --force-device-scale-factor=1`,
+matching the deployment's extension/feature setup. No production container,
+profile, Compose project, or file under `/docker` was changed.
+
+Passed:
+
+- Fresh-profile startup and CDP `Target.createTarget` for `chrome://newtab/`
+  render the mounted `file:///opt/tandem/start/index.html`, title `New Tab`.
+- After bundled extensions finished loading, native Ctrl+T (sent through the
+  disposable engine's loopback VNC socket) creates a Tandem tab, and Alt+Home
+  from `about:blank` opens the same page with title `New Tab`.
+- The enabled `pjimfkbpehlcllblajnpfamdfjhhlgkc` extension manifest declares
+  `chrome_url_overrides: {"newtab": "newtab.html"}`. The managed policy wins
+  over this real bundled override; no extension disabling or gateway route is
+  necessary. CDP targets can retain virtual URL `chrome://newtab/` while the
+  document's `location.href` is the local file URL.
+- `chrome://policy` reports platform/machine/mandatory **OK** for
+  `NewTabPageLocation`, `HomepageLocation`, `HomepageIsNewTabPage`,
+  `ShowHomeButton`, and the unchanged `RestoreOnStartup: 1`.
+- Ten URL/search cases pass, including hostnames, explicit HTTPS, localhost,
+  IPv4, IPv6 loopback, text, empty input, and treating `javascript:`/`data:` as
+  search text rather than executable navigation.
+- Visually inspected light and dark screenshots at 1600×1000 and light at
+  390×844. Narrow document width and scroll width are both 390 (no overflow).
+- All four Compose files pass `docker compose config --format json` with
+  disposable fixture environment values. Assertions cover start/restore policy
+  mounts, read-only file mounts, and exact source/inline Hostinger HTML and
+  policy equality. `python3 tandem/deploy/hostinger/sync-start-config.py --check`
+  passes. No existing policy-validation pattern was present in the upstream
+  contract script, which remains unchanged.
+
+Local proof artifacts (not committed):
+
+- `/tmp/tandem-ntp-evidence/light.png`
+- `/tmp/tandem-ntp-evidence/dark.png`
+- `/tmp/tandem-ntp-evidence/narrow.png`
+- `/tmp/tandem-ntp-evidence/result.json`, `acceptance.json`, `acceptance.log`,
+  `policy.txt`, and `window-titles.json`
+- Reproduction/fixture scripts: `/tmp/tandem-ntp-probe.py`,
+  `/tmp/tandem-ntp-followup.py`, `/tmp/tandem-ntp-compose-check.py`.
+
+Limits: the engine's native X11 `_NET_WM_NAME` remains
+`New Tab - BrowserOS neo`; changing an HTML title/policy cannot rename the
+unmodified application's suffix. The page/tab title is `New Tab`. Existing saved
+tabs (including old onboarding tabs) remain subject to session restore; close
+old onboarding tabs once. A saved-session restart/production deployment was not
+performed. The disposable container was stopped/auto-removed, and all VPS files
+created under `/tmp/tandem-ntp-test-1105` were removed after copying the proof to
+the Mac. An additional short-lived image-inspection container was also `--rm`.

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { persistView, selectView } from '../src/view';
 function storage(value: string | null = null) { return { getItem: () => value, setItem: (key: string, next: string) => { expect(key).toBe('tandem.view'); value = next; } }; }
-test('Neo is default and invalid preferences cannot select another view', () => {
+test('Full browser is default and invalid preferences cannot select another view', () => {
   expect(selectView('', storage())).toBe('neo'); expect(selectView('?view=invalid', storage('invalid'))).toBe('neo');
 });
 test('URL selection wins and persists across later visits', () => {

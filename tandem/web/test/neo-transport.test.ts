@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { ClickReplay, replayNekoClick, selectTransport, sendNekoKeys, TransportFallback, VisibilityPause, HIDDEN_PAUSE_MS } from '../src/neo-transport';
+import { ClickReplay, persistStream, readStream, replayNekoClick, selectTransport, sendNekoKeys, TransportFallback, VisibilityPause, HIDDEN_PAUSE_MS } from '../src/neo-transport';
 import { commandShortcut, shortcutSequence } from '../src/neo-input';
 import { remoteSize } from '../src/neo-resize';
 
@@ -114,4 +114,28 @@ test('default visibility clock calls browser timers without an object receiver',
     pause.visibility(true); pause.visibility(false); pause.stop();
     expect(scheduled).toBe(true); expect(cancelled).toBe(true);
   } finally { globalThis.setTimeout = originalSet; globalThis.clearTimeout = originalClear; }
+});
+
+
+test('Sharp always selects noVNC, while Smooth respects server support and fallback', () => {
+  for (const enabled of [true, false, undefined, 'true', 1]) {
+    for (const fellBack of [true, false]) expect(selectTransport(enabled, fellBack, 'sharp')).toBe('VNC');
+  }
+  expect(selectTransport(true, false, 'smooth')).toBe('WebRTC');
+  expect(selectTransport(true, true, 'smooth')).toBe('VNC');
+  expect(selectTransport(false, false, 'smooth')).toBe('VNC');
+});
+test('stream preference defaults to Smooth, persists choices and rejects invalid stored values', () => {
+  const values = new Map<string, string>();
+  const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+  expect(readStream(storage)).toBe('smooth');
+  persistStream('sharp', storage); expect(values.get('tandem.stream')).toBe('sharp'); expect(readStream(storage)).toBe('sharp');
+  persistStream('smooth', storage); expect(readStream(storage)).toBe('smooth');
+  for (const value of ['', 'VNC', 'WebRTC', 'SHARP', 'invalid']) { values.set('tandem.stream', value); expect(readStream(storage)).toBe('smooth'); }
+});
+test('blocked localStorage does not prevent stream selection or startup', () => {
+  const blocked = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
+  expect(readStream(blocked)).toBe('smooth');
+  expect(() => persistStream('sharp', blocked)).not.toThrow();
+  expect(selectTransport(true, false, 'sharp')).toBe('VNC');
 });

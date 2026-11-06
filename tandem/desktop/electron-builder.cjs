@@ -27,5 +27,5 @@ module.exports = {
   dmg: { sign: false },
   win: { target: ['nsis'] },
   nsis: { oneClick: false, allowToChangeInstallationDirectory: true, perMachine: false },
-  linux: { target: ['AppImage', 'deb'], category: 'Network', maintainer: 'Samin Yasar' }
+  linux: { icon: 'build/icons', target: ['AppImage', 'deb'], category: 'Network', maintainer: 'Samin Yasar' }
 };

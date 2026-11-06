@@ -5,6 +5,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { loadConfig, saveConfig, type Config } from './config';
 import { commandMenuItem, controlCommands, editCommands, navigationCommands, tabCommands } from './commands';
+import { windowTitle } from './title';
 import { isDesktopPopup, isExternalURL, isSameOrigin, validateServerURL } from './policy';
 
 const brand = JSON.parse(readFileSync(path.join(__dirname, 'brand.json'), 'utf8'));
@@ -12,6 +13,7 @@ const smoke = process.env.TANDEM_SMOKE === '1' || process.argv.includes('--smoke
 const smokeURL = process.env.TANDEM_SMOKE_URL ?? process.argv.find(arg => arg.startsWith('--smoke-url='))?.slice(12);
 const devTools = !app.isPackaged || process.env.TANDEM_DEVTOOLS === '1';
 const pages = path.join(__dirname, 'pages');
+const appIcon = path.join(__dirname, 'icon.png');
 const localURL = (name: string) => pathToFileURL(path.join(pages, `${name}.html`)).href;
 app.setName(brand.productName);
 if (smoke) app.setPath('userData', process.env.TANDEM_SMOKE_DATA_DIR ?? path.join(app.getPath('temp'), `${brand.appId}-smoke-${process.pid}`));
@@ -151,7 +153,8 @@ function createViewer(url: string, desktop = false): BrowserWindow {
   const origin = validateServerURL(new URL(url).origin);
   const win = new BrowserWindow({
     ...windowBounds(), minWidth: 640, minHeight: 480, show: !smoke,
-    title: desktop ? 'Desktop view' : brand.productName,
+    title: desktop ? 'Desktop view — Tandem' : brand.shortName,
+    icon: appIcon,
     backgroundColor: brand.colors.background,
     // The viewer's own top bar doubles as the title bar; traffic lights sit in it.
     ...(process.platform === 'darwin' && !desktop ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 14, y: 12 } } : {}),
@@ -165,7 +168,10 @@ function createViewer(url: string, desktop = false): BrowserWindow {
   viewers.set(win.webContents.id, { window: win, origin, url, desktop });
   if (!desktop) mainWindow = win;
   guardNavigation(win, origin);
-  win.on('page-title-updated', event => { if (desktop) { event.preventDefault(); win.setTitle('Desktop view'); } });
+  win.on('page-title-updated', (event, title) => {
+    event.preventDefault();
+    win.setTitle(desktop ? 'Desktop view — Tandem' : windowTitle(title));
+  });
   win.webContents.on('did-fail-load', (_event, code, _description, _url, isMainFrame) => {
     if (isMainFrame && code !== -3) showError(win);
   });
@@ -201,7 +207,7 @@ function createViewer(url: string, desktop = false): BrowserWindow {
 function createLocal(name: 'settings' | 'about') {
   const win = new BrowserWindow({
     width: 600, height: name === 'settings' ? 580 : 620, minWidth: 500, minHeight: 480,
-    show: !smoke, title: brand.productName, backgroundColor: brand.colors.background,
+    show: !smoke, title: brand.productName, icon: appIcon, backgroundColor: brand.colors.background,
     webPreferences: { preload: path.join(__dirname, 'local-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false, webSecurity: true, devTools, webviewTag: false }
   });
   const id = win.webContents.id;
@@ -279,7 +285,7 @@ async function runSmoke(win: BrowserWindow) {
       bridge: after.bridge === 'object' && JSON.stringify(after.keys) === JSON.stringify(expected),
       menuCommand: after.title === 'smoke:command:new-tab',
       isolated: after.node === 'undefined' && after.localBridge === 'undefined',
-      title: win.getTitle() === after.title
+      title: win.getTitle() === windowTitle(after.title)
     };
     const waitFor = async (predicate: () => boolean | Promise<boolean>) => {
       const until = Date.now() + 8000;
@@ -349,6 +355,8 @@ else {
   });
   void app.whenReady().then(async () => {
     if (smoke) app.dock?.hide();
+    else if (!app.isPackaged) app.dock?.setIcon(appIcon);
+    app.setAboutPanelOptions({ applicationName: brand.productName, applicationVersion: app.getVersion(), iconPath: appIcon, credits: `Built on ${brand.engine.name} (${brand.engine.license})` });
     configFile = path.join(app.getPath('userData'), 'config.json');
     config = await loadConfig(configFile);
     installIPC(); installPermissions(); installMenu();
