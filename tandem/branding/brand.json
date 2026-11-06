@@ -12,16 +12,18 @@
   },
   "agentName": "Hermes",
   "colors": {
-    "accent": "#C96442",
-    "accentSoft": "#F1DDD3",
-    "background": "#FAF9F5",
-    "surface": "#F0EEE6",
-    "border": "#E3DFD3",
-    "text": "#1F1E1D",
-    "textMuted": "#6B6A65",
-    "agent": "#4A6FA5",
-    "human": "#C96442",
-    "danger": "#B3261E"
+    "accent": "#2F80D6",
+    "accentSoft": "#DCEEFF",
+    "sky": "#8EC8F4",
+    "skyLight": "#C9E8FF",
+    "background": "#F7FAFD",
+    "surface": "#EEF4FA",
+    "border": "#DCE6F0",
+    "text": "#14202B",
+    "textMuted": "#5F6B78",
+    "agent": "#6D5BD0",
+    "human": "#2F80D6",
+    "danger": "#C62828"
   },
   "logo": "logo.svg"
 }

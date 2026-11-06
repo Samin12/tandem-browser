@@ -65,10 +65,12 @@ try {
   await waitFor("location.pathname==='/login' && !document.querySelector('#login-submit')?.disabled", 'login config');
   check(await js("document.querySelector('#totp-field').hidden") === !totp, 'TOTP field matches auth-config');
   if (totp) await js("document.querySelector('#totp').value='123456'");
+  check(await js("getComputedStyle(document.body).backgroundImage==='none' && getComputedStyle(document.body).backgroundColor==='rgb(247, 250, 253)'"), 'login has a flat cloud-blue background');
+  check(await js("getComputedStyle(document.querySelector('#login-submit')).backgroundColor==='rgb(43, 120, 202)' && getComputedStyle(document.querySelector('#login-submit')).color==='rgb(255, 255, 255)'"), 'primary button uses accessible blue with white text (4.52:1)');
   await shot(totp ? 'login-totp.png' : 'login.png');
   await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
   await shot('login-dark.png');
-  check(await js("getComputedStyle(document.documentElement).getPropertyValue('--background').trim()==='#211F1C'"), 'login uses dark theme despite runtime branding');
+  check(await js("getComputedStyle(document.documentElement).getPropertyValue('--background').trim()==='#0F1720'"), 'login uses dark theme despite runtime branding');
   await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
   await shot('login-narrow-dark.png');
   check(await js("document.documentElement.scrollWidth===innerWidth"), '390px login has no horizontal overflow');
@@ -87,6 +89,7 @@ try {
   await waitFor("location.pathname==='/' && document.querySelector('#connection')?.textContent.startsWith('Live') && document.querySelector('#empty')?.hidden", 'authenticated live frame');
   check(await js("document.title.endsWith(' — Tandem')"), 'runtime product name and tab title');
   await click('[data-mode="agent"]'); await shot('agent.png');
+  check(await js("getComputedStyle(document.querySelector('#control-indicator')).color==='rgb(109, 91, 208)'"), 'agent control indicator uses violet');
   check(await js("document.querySelector('#address').readOnly && document.querySelector('#desktop-view').disabled"), 'Agent mode blocks address and desktop controls');
   const before = (await messages()).length;
   await js("let c=document.querySelector('#page');c.focus();c.dispatchEvent(new KeyboardEvent('keydown',{key:'a',code:'KeyA',bubbles:true}));c.dispatchEvent(new WheelEvent('wheel',{deltaY:10,bubbles:true,cancelable:true}))");
@@ -101,6 +104,7 @@ try {
   await click('[data-mode="manual"]');
   await waitFor("document.body.classList.contains('manual')", 'Manual control acknowledgement');
   await shot('manual.png');
+  check(await js("getComputedStyle(document.querySelector('#control-indicator')).color==='rgb(47, 128, 214)'"), 'manual control indicator uses human blue');
   check(await js("!document.querySelector('#address').readOnly && !document.querySelector('#desktop-view').disabled && document.querySelector('#banner-text').textContent.includes('2 waiting')"), 'Manual control enables navigation and shows waiting agent calls');
   await js("desktopCommand('focus-address');desktopCommand('edit-select-all');desktopCommand('edit-copy')"); await delay(100);
   check(await js("copiedText.startsWith('https://')"), 'Desktop copy routes to focused address field');
@@ -161,6 +165,7 @@ try {
   check(await js("document.querySelector('.brand-mark img').getAttribute('src')==='/assets/mark.svg' && document.querySelector('.brand-mark').textContent==='Tandem'"), 'viewer uses transparent brand mark and Tandem wordmark');
   check(await js("document.querySelector('#neo-window').getAttribute('aria-label')==='Browser window'"), 'browser window has product-neutral accessible label');
   await click('#menu-button'); await shot('viewer-full-light.png');
+  check(await js("getComputedStyle(document.querySelector('#neo-loading')).backgroundImage==='none' && getComputedStyle(document.querySelector('#empty')).backgroundImage==='none'"), 'connecting and empty states have flat backgrounds');
   check(await js("document.querySelector('#stream-smooth').getAttribute('aria-pressed')==='true'"), 'Smooth is the default stream');
   await click('#stream-sharp');
   check(await js("localStorage.getItem('tandem.stream')==='sharp' && document.querySelector('#stream-sharp').getAttribute('aria-pressed')==='true'"), 'Sharp selection is persisted and reflected in the menu');

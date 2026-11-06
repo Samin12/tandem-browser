@@ -110,7 +110,7 @@ function draw() {
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
   }
   context.setTransform(dpr, 0, 0, dpr, 0, 0);
-  context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#F0EEE6';
+  context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#EEF4FA';
   context.fillRect(0, 0, w, h);
   if (frame) {
     const fit = fitFrame(w, h, frame.header.deviceWidth, frame.header.deviceHeight);
@@ -488,7 +488,7 @@ function resized() { draw(); clearTimeout(viewportTimer); viewportTimer = setTim
 new ResizeObserver(resized).observe(canvas); window.addEventListener('resize', resized);
 window.addEventListener('pagehide', () => { stopped = true; send({ t: 'follow', enabled: false }); neo?.stop(); releaseInputs(); unsubscribe?.(); clearInterval(pingTimer); clearTimeout(reconnectTimer); socket?.close(); frame?.image.close(); });
 async function start() { try { brand = await loadBrand();
-  neo = new NeoView($('neo-window'), mac, brand.colors.background || '#FAF9F5', status => { neoStatus = status; renderConnection(); }, notify, () => setMode('manual'), send, stream);
+  neo = new NeoView($('neo-window'), mac, getComputedStyle(document.documentElement).getPropertyValue('--background').trim() || '#F7FAFD', status => { neoStatus = status; renderConnection(); }, notify, () => setMode('manual'), send, stream);
   applyView(); render(); draw(); await connect(); } catch (error) { notify(error instanceof Error ? error.message : 'Unable to start browser.'); } }
 applyView();
 void start();

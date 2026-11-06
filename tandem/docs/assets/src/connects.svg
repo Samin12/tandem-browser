@@ -1,44 +1,44 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1120" height="650" viewBox="0 0 1120 650">
 <defs>
-<style>text{font-family:Arial,sans-serif;fill:#1F1E1D} .muted{fill:#6B6A65} .clay{fill:#C96442} .blue{fill:#4A6FA5} .eyebrow{font-size:13px;font-weight:700;letter-spacing:2px}</style>
-<filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#49382B" flood-opacity=".14"/></filter>
-<marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M1 1 6 4 1 7" fill="none" stroke="#9A968B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<style>text{font-family:Arial,sans-serif;fill:#14202B} .muted{fill:#5F6B78} .accent{fill:#2F80D6} .blue{fill:#6D5BD0} .eyebrow{font-size:13px;font-weight:700;letter-spacing:2px}</style>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#14202B" flood-opacity=".07"/></filter>
+<marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M1 1 6 4 1 7" fill="none" stroke="#8C9BAA" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
 </defs>
-<rect width="1120" height="650" rx="26" fill="#FAF9F5"/>
-<rect x=".75" y=".75" width="1118.5" height="648.5" rx="25.25" fill="none" stroke="#E3DFD3" stroke-width="1.5"/>
-<text x="44" y="51" font-size="12" class="clay" font-weight="700" letter-spacing="1.8">ONE BROWSER. EVERY WAY IN.</text>
+<rect width="1120" height="650" rx="26" fill="#F7FAFD"/>
+<rect x=".75" y=".75" width="1118.5" height="648.5" rx="25.25" fill="none" stroke="#DCE6F0" stroke-width="1.5"/>
+<text x="44" y="51" font-size="12" class="accent" font-weight="700" letter-spacing="1.8">ONE BROWSER. EVERY WAY IN.</text>
 <text x="44" y="105" font-size="36" font-weight="500" letter-spacing="-1">You and your agent meet in Tandem.</text>
-<rect x="484" y="158" width="592" height="418" rx="21" fill="#F0EEE6" stroke="#E3DFD3"/>
+<rect x="484" y="158" width="592" height="418" rx="21" fill="#EEF4FA" stroke="#DCE6F0"/>
 <text x="506" y="191" font-size="12" class="muted" font-weight="700" letter-spacing="1.5">YOUR VPS</text>
-<circle cx="1049" cy="186" r="4" fill="#C96442"/>
-<rect x="44" y="211" width="302" height="134" rx="14" fill="#FFFEFA" stroke="#E3DFD3"/>
-<g transform="translate(64 231) scale(1)" fill="none" stroke="#C96442" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="15" height="12" rx="2"/><path d="M6 19h4m-2-4v4M4 6h11"/><rect x="17" y="10" width="5" height="11" rx="1.5"/></g>
+<circle cx="1049" cy="186" r="4" fill="#2F80D6"/>
+<rect x="44" y="211" width="302" height="134" rx="14" fill="#FFFFFF" stroke="#DCE6F0"/>
+<g transform="translate(64 231) scale(1)" fill="none" stroke="#2F80D6" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="15" height="12" rx="2"/><path d="M6 19h4m-2-4v4M4 6h11"/><rect x="17" y="10" width="5" height="11" rx="1.5"/></g>
 <text x="64" y="276" font-size="19" font-weight="600" letter-spacing="-.2">Desktop app / any browser</text>
 <text x="64" y="304" font-size="15" class="muted" >Watch live or take the wheel.</text>
-<rect x="44" y="414" width="302" height="134" rx="14" fill="#FFFEFA" stroke="#E3DFD3"/>
-<g transform="translate(64 434) scale(1)" fill="none" stroke="#4A6FA5" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="m7 5-5 7 5 7m10-14 5 7-5 7m-3-16-4 20"/></g>
+<rect x="44" y="414" width="302" height="134" rx="14" fill="#FFFFFF" stroke="#DCE6F0"/>
+<g transform="translate(64 434) scale(1)" fill="none" stroke="#6D5BD0" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="m7 5-5 7 5 7m10-14 5 7-5 7m-3-16-4 20"/></g>
 <text x="64" y="479" font-size="19" font-weight="600" letter-spacing="-.2">Your agent</text>
 <text x="64" y="507" font-size="15" class="muted" >Hermes · Claude Code · Codex</text>
 <text x="64" y="529" font-size="15" class="muted" >Any MCP client</text>
-<path d="M346 277H519" fill="none" stroke="#9A968B" stroke-width="1.6" marker-end="url(#arrow)"/>
-<text x="431" y="262" font-size="12" class="clay" font-weight="700" text-anchor="middle" letter-spacing=".8">HTTPS</text>
-<path d="M346 481H466Q478 481 478 469V405Q478 393 490 393H519" fill="none" stroke="#9A968B" stroke-width="1.6" marker-end="url(#arrow)"/>
+<path d="M346 277H519" fill="none" stroke="#8C9BAA" stroke-width="1.6" marker-end="url(#arrow)"/>
+<text x="431" y="262" font-size="12" class="accent" font-weight="700" text-anchor="middle" letter-spacing=".8">HTTPS</text>
+<path d="M346 481H466Q478 481 478 469V405Q478 393 490 393H519" fill="none" stroke="#8C9BAA" stroke-width="1.6" marker-end="url(#arrow)"/>
 <text x="407" y="466" font-size="12" class="blue" font-weight="700" text-anchor="middle" letter-spacing=".8">MCP</text>
-<rect x="522" y="235" width="239" height="216" rx="15" fill="#FFFEFA" stroke="#C96442" stroke-width="1.5"/>
-<g transform="translate(542 255) scale(1.3)" fill="none" stroke="#C96442" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 3v6c0 5-8 11-8 11s-8-6-8-11V5z"/><path d="m8 11 3 3 5-6"/></g>
+<rect x="522" y="235" width="239" height="216" rx="15" fill="#FFFFFF" stroke="#2F80D6" stroke-width="1.5"/>
+<g transform="translate(542 255) scale(1.3)" fill="none" stroke="#2F80D6" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 3v6c0 5-8 11-8 11s-8-6-8-11V5z"/><path d="m8 11 3 3 5-6"/></g>
 <text x="542" y="317" font-size="22" font-weight="600" letter-spacing="-.5">Tandem gateway</text>
 <text x="542" y="349" font-size="16" class="muted" >Login + 2FA</text>
 <text x="542" y="376" font-size="16" class="muted" >Live view + control</text>
 <text x="542" y="403" font-size="16" class="muted" >Agent access</text>
-<path d="M761 343H835" fill="none" stroke="#9A968B" stroke-width="1.6" marker-end="url(#arrow)"/>
+<path d="M761 343H835" fill="none" stroke="#8C9BAA" stroke-width="1.6" marker-end="url(#arrow)"/>
 <text x="798" y="329" font-size="9.5" class="muted" font-weight="700" text-anchor="middle" letter-spacing=".5">PRIVATE</text>
-<rect x="838" y="235" width="208" height="216" rx="15" fill="#FAF9F5" stroke="#D9D5CB"/>
-<g transform="translate(859 255) scale(1.3)" fill="none" stroke="#6B6A65" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M2 9h20M6 6.5h.01m3 0h.01"/></g>
+<rect x="838" y="235" width="208" height="216" rx="15" fill="#F7FAFD" stroke="#DCE6F0"/>
+<g transform="translate(859 255) scale(1.3)" fill="none" stroke="#5F6B78" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M2 9h20M6 6.5h.01m3 0h.01"/></g>
 <text x="859" y="317" font-size="20" font-weight="600" letter-spacing="-.5">Browser engine</text>
 <text x="859" y="350" font-size="16" class="muted" >The same tabs,</text>
 <text x="859" y="374" font-size="16" class="muted" >logins and profile.</text>
 <text x="859" y="420" font-size="11" class="muted" >Unmodified upstream image</text>
-<path d="M506 489H1053" stroke="#DDD8CB"/>
+<path d="M506 489H1053" stroke="#DCE6F0"/>
 <text x="506" y="518" font-size="17" class="muted" >One public gateway. Browser ports stay private.</text>
 <text x="506" y="546" font-size="14" class="muted" >Only HTTPS is exposed to the internet.</text>
 <text x="44" y="614" font-size="13" class="muted" >Built on BrowserOS neo · AGPL-3.0</text>

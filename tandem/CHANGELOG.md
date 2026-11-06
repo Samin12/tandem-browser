@@ -13,6 +13,8 @@ of declared breaking changes is not a guarantee of compatibility.
 
 ### Tandem changes
 
+- Refresh the viewer, desktop app, start page and README graphics with a calmer cloud-blue brand.
+
 - Add an offline Tandem start page with search/URL navigation, quick links, and
   light/dark layouts. Managed new-tab and homepage policies use the mounted page.
 - Mount the page and policies in production, local, CI and Hostinger deployments;

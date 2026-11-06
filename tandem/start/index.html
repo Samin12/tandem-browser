@@ -8,15 +8,17 @@
   <style>
     :root {
       color-scheme: light dark;
-      --background: #FAF9F5;
-      --surface: #FFFDF9;
-      --text: #1F1E1D;
-      --muted: #6B6A65;
-      --border: #E3DFD3;
-      --accent: #C96442;
-      --agent: #4A6FA5;
-      --hover: #F0EEE6;
-      --shadow: 0 8px 32px #1f1e1d06, 0 2px 5px #1f1e1d03;
+      --background: #F7FAFD;
+      --surface: #FFFFFF;
+      --text: #14202B;
+      --muted: #5F6B78;
+      --border: #DCE6F0;
+      --accent: #2F80D6;
+      /* Accessible white button content: 4.52:1. */
+      --primary: #2B78CA;
+      --agent: #6D5BD0;
+      --hover: #EEF4FA;
+      --shadow: 0 8px 32px #14202B06, 0 2px 5px #14202B03;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: var(--background);
       color: var(--text);
@@ -46,7 +48,7 @@
       box-shadow: var(--shadow);
       transition: border-color .15s, box-shadow .15s;
     }
-    .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px #C9644214, var(--shadow); }
+    .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent), var(--shadow); }
     .search > svg { width: 21px; height: 21px; color: var(--muted); flex-shrink: 0; }
     input {
       min-width: 0;
@@ -68,13 +70,13 @@
       flex-shrink: 0;
       border: 0;
       border-radius: 11px;
-      background: var(--accent);
-      color: #FFFDF9;
+      background: var(--primary);
+      color: #FFFFFF;
       cursor: pointer;
     }
     button:hover { filter: brightness(.93); }
     button svg { width: 20px; height: 20px; }
-    a:focus-visible, button:focus-visible { outline: 2px solid var(--agent); outline-offset: 4px; }
+    a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
     nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 24px; max-width: 700px; }
     nav a {
       display: inline-flex;
@@ -92,12 +94,14 @@
     .hint::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--agent); flex-shrink: 0; }
     @media (prefers-color-scheme: dark) {
       :root {
-        --background: #1F1E1D;
-        --surface: #292826;
-        --text: #FAF9F5;
-        --muted: #B5B1A8;
-        --border: #45413A;
-        --hover: #34312C;
+        --background: #0F1720;
+        --accent: #5FAAF0;
+        --agent: #B4A5FF;
+        --surface: #16212C;
+        --text: #E6EEF6;
+        --muted: #A5B4C4;
+        --border: #243241;
+        --hover: #20303F;
         --shadow: 0 8px 32px #00000014;
       }
     }
@@ -118,50 +122,11 @@
   <main>
     <header class="brand">
       <!-- Inline mark from tandem/branding/mark.svg; no remote assets. -->
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="340 366 340 340" aria-hidden="true">
-  <defs>
-    <linearGradient id="bg" x1="512" y1="100" x2="512" y2="924" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#EE8A5F"/>
-      <stop offset="0.55" stop-color="#D2633D"/>
-      <stop offset="1" stop-color="#A9441F"/>
-    </linearGradient>
-    <radialGradient id="glow" cx="512" cy="180" r="560" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.32"/>
-      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="card" x1="512" y1="300" x2="512" y2="760" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FFFDF9"/>
-      <stop offset="1" stop-color="#F3EEE5"/>
-    </linearGradient>
-    <linearGradient id="you" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#E5764B"/>
-      <stop offset="1" stop-color="#B9512C"/>
-    </linearGradient>
-    <linearGradient id="agent" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#5E86C2"/>
-      <stop offset="1" stop-color="#3D5F95"/>
-    </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
-      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#2B1408" flood-opacity="0.30"/>
-    </filter>
-    <filter id="iconShadow" x="-10%" y="-10%" width="120%" height="125%">
-      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000" flood-opacity="0.22"/>
-    </filter>
-    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#2B1408" flood-opacity="0.28"/>
-    </filter>
-  </defs>
-  <!-- the agent's spark -->
-  <path d="M528 392 Q533 425 566 430 Q533 435 528 468 Q523 435 490 430 Q523 425 528 392 Z" fill="url(#agent)"/>
-  <path d="M580 378 Q582 391 595 393 Q582 395 580 408 Q578 395 565 393 Q578 391 580 378 Z" fill="#5E86C2" opacity="0.8"/>
-  <!-- agent pointer (blue), riding behind -->
-  <g filter="url(#soft)" transform="translate(366 392) scale(0.86)">
-    <path d="M0 0 L0 196 L50 152 L84 228 L120 212 L86 138 L148 138 Z" fill="url(#agent)" stroke="#FFFDF9" stroke-width="16" stroke-linejoin="round" paint-order="stroke"/>
-  </g>
-  <!-- your pointer (clay), in front -->
-  <g filter="url(#soft)" transform="translate(526 480) scale(0.86)">
-    <path d="M0 0 L0 196 L50 152 L84 228 L120 212 L86 138 L148 138 Z" fill="url(#you)" stroke="#FFFDF9" stroke-width="16" stroke-linejoin="round" paint-order="stroke"/>
-  </g>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="296 246 450 548" aria-hidden="true">
+<defs><filter id="s" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0B2A4A" flood-opacity="0.18"/></filter>
+<linearGradient id="f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5FAAF0"/><stop offset="1" stop-color="#2F80D6"/></linearGradient></defs>
+<g transform="translate(322 264) scale(1.5)"><path d="M0 0 L0 196 L50 152 L84 228 L120 212 L86 138 L148 138 Z" fill="#B9DCF8"/></g>
+<g filter="url(#s)" transform="translate(492 416) scale(1.5)"><path d="M0 0 L0 196 L50 152 L84 228 L120 212 L86 138 L148 138 Z" fill="url(#f)" stroke="#FFFFFF" stroke-width="12" stroke-linejoin="round" paint-order="stroke"/></g>
 </svg>
       <h1>Tandem</h1>
     </header>

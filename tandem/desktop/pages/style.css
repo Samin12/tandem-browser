@@ -1,7 +1,8 @@
+/* White on the brand accent is 4.05:1; the primary shade provides 4.52:1. */
 :root {
   color-scheme: light dark;
-  --background: #FAF9F5; --surface: #F0EEE6; --text: #1F1E1D; --textMuted: #6B6A65;
-  --border: #E3DFD3; --accent: #C96442; --accentSoft: #F1DDD3; --agent: #4A6FA5; --danger: #B3261E;
+  --background: #F7FAFD; --surface: #EEF4FA; --text: #14202B; --textMuted: #5F6B78;
+  --border: #DCE6F0; --accent: #2F80D6; --primary: #2B78CA; --accentSoft: #DCEEFF; --agent: #6D5BD0; --danger: #C62828;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 * { box-sizing: border-box; }
@@ -14,9 +15,9 @@ p { font-size: 14px; line-height: 1.65; color: var(--textMuted); }
 .hint { font-size: 12px; overflow-wrap: anywhere; }
 label { display: block; margin: 24px 0 8px; font-size: 12px; font-weight: 600; }
 input { width: 100%; padding: 13px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); background: var(--surface); font: inherit; font-size: 14px; }
-input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--agent); outline-offset: 3px; }
+input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
-button { font: inherit; font-size: 13px; font-weight: 600; background: #C96442; color: white; border: 1px solid transparent; border-radius: 9px; padding: 12px 16px; cursor: pointer; }
+button { font: inherit; font-size: 13px; font-weight: 600; background: var(--primary); color: white; border: 1px solid transparent; border-radius: 9px; padding: 12px 16px; cursor: pointer; }
 button:hover { filter: brightness(.95); }
 button.secondary { color: var(--text); background: var(--surface); border-color: var(--border); }
 button:disabled { cursor: wait; opacity: .65; }
@@ -32,5 +33,5 @@ body[data-page="about"] h1 { margin: 4px 0 8px; }
 body[data-page="about"] #attribution ~ p { font-size: 11px; line-height: 1.6; }
 @media(max-width:540px) { main { padding: 28px; } }
 @media(prefers-color-scheme:dark) {
-  :root { --background:#211F1C!important; --surface:#2A2824!important; --text:#F2F0E9!important; --textMuted:#B6B1A6!important; --border:#45413A!important; --accent:#DB896B!important; --accentSoft:#443027!important; --agent:#97B4DC!important; --danger:#FF9A8F!important; }
+  :root { --background:#0F1720!important; --surface:#16212C!important; --text:#E6EEF6!important; --textMuted:#A5B4C4!important; --border:#243241!important; --accent:#5FAAF0!important; --accentSoft:#20384F!important; --agent:#B4A5FF!important; --danger:#FF8A80!important; }
 }
