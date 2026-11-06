@@ -77,7 +77,7 @@ try {
     const d=Object.getOwnPropertyDescriptor(RFB.prototype,'viewOnly');Object.defineProperty(RFB.prototype,'viewOnly',{...d,set(value){window.viewOnlyStates.push(value);window.realRFB=this;d.set.call(this,value)}});
   })()`);
   check(await js("!viewerMessages.some(m=>m.t==='view') && viewerMessages.some(m=>m.t==='follow'&&m.enabled)"), 'Neo follows Watch without subscribing to screencasts');
-  check(await js("document.querySelector('#neo-bar').getBoundingClientRect().height===44"), 'Tandem bar is 44px');
+  check(await js("document.querySelector('#neo-bar').getBoundingClientRect().height===52"), 'Tandem bar is 52px');
   check(await js("document.querySelector('#neo-window').getBoundingClientRect().width===1440 && document.documentElement.scrollWidth===1440"), 'Neo spans the viewport without margins or overflow');
   await click('[data-mode=manual]');
   await wait("document.body.classList.contains('manual') && window.realRFB?.viewOnly===false", 'manual acknowledgment');

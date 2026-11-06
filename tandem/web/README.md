@@ -56,8 +56,8 @@ acceptance is described below. Native Electron menus, OS IME candidate windows
 and clipboard permissions in other browsers still need acceptance with their
 respective components.
 
-Neo view is the default at `/`: the gateway serves its engine's noVNC ES module
-at runtime, so noVNC is never bundled into this viewer. The 44px Tandem bar
+Full browser is the default at `/`: the gateway serves its engine's noVNC ES module
+at runtime, so noVNC is never bundled into this viewer. The 52px Tandem bar
 shares the existing control coordinator, mode preference, audit dialog, login
 and desktop bridge. Watch enables gateway follow; Agent disables it. Input is
 view-only until a `control` acknowledgment confirms this session holds control.
@@ -67,7 +67,7 @@ input handlers keep their real view-only state. This matches the gateway's
 permission for every viewer to resize the desktop. Losing the viewer socket also
 makes VNC view-only while it reconnects.
 
-The menu switches between Neo and the original screencast **Lite view**.
+The menu switches between Full browser and the original screencast **Lite view**.
 `/?view=lite` and `/?view=neo` override and save `tandem.view`; blocked storage
 is optional. Switching resets the viewer socket to drop its old screencast
 subscription. Neo does not subscribe to screencasts or duplicate native dialogs.
@@ -105,3 +105,8 @@ The real check saves 1440×900 Manual, Agent, Watch and Lite captures (plus a
 VNC shortcuts/clipboard/control and uses a simulated desktop preload; it does
 not launch Electron or prove native menu delivery. `dev/visual-check.ts` keeps
 using Lite against the mock, which deliberately has no VNC implementation.
+
+The viewer menu offers **Stream: Smooth (video)** (WebRTC with automatic VNC fallback)
+and **Sharp (text)** (noVNC). Smooth is the default. The choice is stored as
+`tandem.stream` when local storage is available; changing it reconnects the
+stream without changing control ownership. Stream settings apply to Full browser.

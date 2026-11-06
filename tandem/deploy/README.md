@@ -115,6 +115,54 @@ per container. Gateway audit/session state persists in the private gateway data
 folder. The managed `RestoreOnStartup: 1` policy restores open tabs on browser
 restart; it does not preserve in-flight form input or agent calls.
 
+## Start page and managed policies
+
+`../start/index.html` is the self-contained Tandem start page (inline brand mark,
+CSS and JavaScript; no remote assets or background requests). Search/URL input
+navigates only when submitted; the quick links navigate when clicked. The page
+supports system light/dark mode and narrow windows. Its document title is
+`New Tab`.
+
+The engine mounts it read-only at `/opt/tandem/start/index.html`.
+`policies/tandem-start.json` manages `NewTabPageLocation` and `HomepageLocation`
+as `file:///opt/tandem/start/index.html`, sets `HomepageIsNewTabPage: false`, and
+shows the Home button. The existing `tandem-restore.json` remains
+`{"RestoreOnStartup": 1}`: startup restores saved tabs, while a fresh profile
+opens the managed new-tab page. Existing saved onboarding tabs should be closed
+once; this does not replace them or alter profile preferences. The unmodified
+engine's native product name remains in engine-owned settings/About and the raw
+desktop window frame: X11 reports `New Tab - BrowserOS neo`. Enterprise start
+policies control the document/tab title, not that application suffix. Removing
+the suffix requires a separate window-manager/viewer treatment or engine change.
+
+The production/local/CI Compose files bind-mount both policy files and the page.
+**Hostinger Docker Manager** stores only Compose and `.env`, so
+`hostinger/compose.yaml` instead embeds both policies and the HTML as read-only
+`configs:` at the same engine paths. After changing the page or start policy:
+
+```sh
+python3 tandem/deploy/hostinger/sync-start-config.py
+python3 tandem/deploy/hostinger/sync-start-config.py --check
+```
+
+Run these from the repository root. The helper escapes Compose dollar
+interpolation; do not hand-edit the generated inline configs. No gateway route,
+new service, published port or Chromium rebuild is needed.
+
+For an existing deployment, copy/apply the complete updated Compose file (with
+all three `neo.configs` entries on Hostinger), and include the page and policy
+files for bind-mount deployments. Recreate the stack together during the next
+planned deployment so namespace partners reconnect. Building the gateway alone
+does not install these configs. Keep the existing `/data` volume and restore
+policy. This change does not itself deploy or restart production.
+
+Acceptance on the pinned engine: visit `chrome://policy` and check all four
+start policies plus `RestoreOnStartup` report `OK`. Open a new tab and use Home:
+both must render Tandem with title `New Tab`. CDP may retain `chrome://newtab/`
+as the target's virtual URL while `location.href` is the mounted `file://` URL.
+See [VALIDATION.md](VALIDATION.md#tandem-start-page--isolated-vps-acceptance) for
+isolated engine evidence and limitations.
+
 ## Encrypted backups and restore
 
 **Treat profiles and backups like passwords.** Chromium's Linux basic key offers

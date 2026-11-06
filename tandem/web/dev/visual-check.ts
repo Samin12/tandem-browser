@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { homedir } from 'node:os';
 
 const root = resolve(import.meta.dir, '..');
-const screenshots = resolve(import.meta.dir, 'screenshots');
+const screenshots = process.env.TANDEM_SCREENSHOTS ?? resolve(import.meta.dir, 'screenshots');
 await mkdir(screenshots, { recursive: true });
 await mkdir(resolve(homedir(), '.cache'), { recursive: true });
 const profile = await mkdtemp(resolve(homedir(), '.cache/tandem-web-check-'));
@@ -15,7 +15,7 @@ const totp = process.argv.includes('--totp');
 const mock = Bun.spawn(['bun', 'dev/mock-server.ts'], { cwd: root, env: { ...process.env, PORT: String(port), TANDEM_DEV_PASSWORD: password, TANDEM_DEV_TOTP: totp ? '1' : '0' }, stdout: 'ignore', stderr: 'pipe' });
 let chrome: ReturnType<typeof Bun.spawn> | undefined;
 let ws: WebSocket | undefined;
-const checks: string[] = [], errors: string[] = [];
+const checks: string[] = [], errors: string[] = [], captures: string[] = [];
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function until<T>(fn: () => Promise<T>, description: string, timeout = 10000): Promise<T> {
   const deadline = Date.now() + timeout;
@@ -52,7 +52,7 @@ try {
     return response.result.value;
   };
   const waitFor = (expression: string, label: string) => until(() => js(expression), label);
-  const shot = async (name: string) => { const image = await cdp('Page.captureScreenshot', { format: 'png' }); await Bun.write(resolve(screenshots, name), Buffer.from(image.data, 'base64')); };
+  const shot = async (name: string) => { captures.push(resolve(screenshots, name)); const image = await cdp('Page.captureScreenshot', { format: 'png' }); await Bun.write(resolve(screenshots, name), Buffer.from(image.data, 'base64')); };
   const click = (selector: string) => js(`document.querySelector(${JSON.stringify(selector)}).click()`);
   const messages = () => js("fetch('/api/mock/messages').then(r=>r.json())") as Promise<Record<string, any>[]>;
   const post = (path: string, body = {}) => js(`fetch(${JSON.stringify(path)},{method:'POST',headers:{'X-Tandem':'1','Content-Type':'application/json'},body:JSON.stringify(${JSON.stringify(body)})}).then(r=>r.json())`);
@@ -60,11 +60,20 @@ try {
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   // Exercise the native preload bridge without installing or launching Electron.
   await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('tandem.view','lite');window.tandemDesktop={isDesktop:true,platform:'darwin',version:'test',onCommand(cb){window.desktopCommand=cb;return()=>{}},writeClipboard(text){window.copiedText=text},readClipboard(){return 'Pasted from desktop'},openSettings(){window.settingsOpened=true}}` });
+  await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] });
   await cdp('Page.navigate', { url: origin });
   await waitFor("location.pathname==='/login' && !document.querySelector('#login-submit')?.disabled", 'login config');
   check(await js("document.querySelector('#totp-field').hidden") === !totp, 'TOTP field matches auth-config');
   if (totp) await js("document.querySelector('#totp').value='123456'");
   await shot(totp ? 'login-totp.png' : 'login.png');
+  await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
+  await shot('login-dark.png');
+  check(await js("getComputedStyle(document.documentElement).getPropertyValue('--background').trim()==='#211F1C'"), 'login uses dark theme despite runtime branding');
+  await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
+  await shot('login-narrow-dark.png');
+  check(await js("document.documentElement.scrollWidth===innerWidth"), '390px login has no horizontal overflow');
+  await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] });
   await js("document.querySelector('#password').value='wrong-password';document.querySelector('#login-form').requestSubmit()");
   await waitFor("document.querySelector('#login-error').textContent.includes('Incorrect password')", 'invalid credentials displayed');
   check(await js("!document.querySelector('#login-submit').disabled"), 'Invalid credentials allow retry');
@@ -76,7 +85,7 @@ try {
   }
   await js(`document.querySelector('#password').value=${JSON.stringify(password)};document.querySelector('#login-form').requestSubmit()`);
   await waitFor("location.pathname==='/' && document.querySelector('#connection')?.textContent.startsWith('Live') && document.querySelector('#empty')?.hidden", 'authenticated live frame');
-  check(await js("document.title.includes('Tandem Browser')"), 'runtime product name and tab title');
+  check(await js("document.title.endsWith(' — Tandem')"), 'runtime product name and tab title');
   await click('[data-mode="agent"]'); await shot('agent.png');
   check(await js("document.querySelector('#address').readOnly && document.querySelector('#desktop-view').disabled"), 'Agent mode blocks address and desktop controls');
   const before = (await messages()).length;
@@ -145,6 +154,28 @@ try {
   check(await js("document.documentElement.scrollWidth===innerWidth"), '390px toolbar has no horizontal overflow');
   const viewportMessages = (await messages()).filter(m=>m.t==='viewport');
   check(viewportMessages.some(m=>m.dpr===2 && m.w===390), 'Resize sends CSS viewport and DPR');
+  // Full browser chrome can be checked against the mock, which intentionally has no VNC engine.
+  await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await click('#menu-button'); await click('#switch-view');
+  await waitFor("document.body.classList.contains('neo-view')", 'Full browser menu selection');
+  check(await js("document.querySelector('.brand-mark img').getAttribute('src')==='/assets/mark.svg' && document.querySelector('.brand-mark').textContent==='Tandem'"), 'viewer uses transparent brand mark and Tandem wordmark');
+  check(await js("document.querySelector('#neo-window').getAttribute('aria-label')==='Browser window'"), 'browser window has product-neutral accessible label');
+  await click('#menu-button'); await shot('viewer-full-light.png');
+  check(await js("document.querySelector('#stream-smooth').getAttribute('aria-pressed')==='true'"), 'Smooth is the default stream');
+  await click('#stream-sharp');
+  check(await js("localStorage.getItem('tandem.stream')==='sharp' && document.querySelector('#stream-sharp').getAttribute('aria-pressed')==='true'"), 'Sharp selection is persisted and reflected in the menu');
+  await cdp('Page.navigate', { url: `${origin}/?view=neo` });
+  await waitFor("document.querySelector('#stream-sharp')?.getAttribute('aria-pressed')==='true'", 'Sharp preference survives a reload');
+  check(await js("localStorage.getItem('tandem.stream')==='sharp'"), 'Sharp preference survives a page reload');
+  await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
+  await click('#menu-button'); await shot('viewer-full-dark.png');
+  await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
+  await js("document.body.classList.remove('desktop-mac')");
+  await shot('viewer-full-narrow-dark.png');
+  check(await js("document.documentElement.scrollWidth===innerWidth && document.querySelector('#menu-button').getBoundingClientRect().right<=innerWidth"), '390px Full browser controls fit the screen');
+  await click('#stream-smooth');
+  check(await js("localStorage.getItem('tandem.stream')==='smooth' && document.querySelector('#stream-smooth').getAttribute('aria-pressed')==='true'"), 'Smooth can be restored');
+  await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] });
   await js("desktopCommand('logout')"); await waitFor("location.pathname==='/login'", 'logout redirect');
   for (let attempt=0;attempt<6;attempt++) {
     if(totp) await js("document.querySelector('#totp').value='123456'");
@@ -154,7 +185,7 @@ try {
   }
   check(await js("document.querySelector('#login-submit').disabled && document.querySelector('#login-error').textContent.includes('Too many attempts')"), 'Rate limit disables retry and displays retry time');
   check(errors.length===0, `No browser runtime exceptions (${errors.length})`);
-  console.log(JSON.stringify({ totp, checks, runtimeErrors:errors, screenshots:[totp ? 'login-totp.png' : 'login.png','agent.png','manual.png','narrow.png'].map(name=>resolve(screenshots,name)) },null,2));
+  console.log(JSON.stringify({ totp, checks, runtimeErrors:errors, screenshots:captures },null,2));
 } finally {
   ws?.close(); chrome?.kill(); mock.kill();
   if (chrome) await chrome.exited;

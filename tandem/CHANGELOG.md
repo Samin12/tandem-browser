@@ -5,6 +5,30 @@ references), **Tandem changes**, **Compatibility** (risk, engine image pins and
 contract checks), and **Breaking** (declared migration requirements). An absence
 of declared breaking changes is not a guarantee of compatibility.
 
+## 2026-11-05 — Tandem start page
+
+### Imported upstream
+
+- None; the pinned Neo engine image is unchanged.
+
+### Tandem changes
+
+- Add an offline Tandem start page with search/URL navigation, quick links, and
+  light/dark layouts. Managed new-tab and homepage policies use the mounted page.
+- Mount the page and policies in production, local, CI and Hostinger deployments;
+  Docker Manager keeps self-contained inline configs.
+
+### Compatibility
+
+- Verified `file://` new-tab policy on the pinned engine with bundled extensions
+  enabled. `RestoreOnStartup: 1` still restores previous tabs; fresh profiles use
+  the Tandem page. Existing onboarding tabs are not rewritten.
+
+### Breaking
+
+- Existing deployments must apply the updated Compose mounts/configs and recreate
+  the stack together during their next planned deployment. No Chromium rebuild.
+
 ## 2026-11-05 — Agent speed and CDP clients
 
 ### Imported upstream

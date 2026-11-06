@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>New Tab</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --background: #FAF9F5;
+      --surface: #FFFDF9;
+      --text: #1F1E1D;
+      --muted: #6B6A65;
+      --border: #E3DFD3;
+      --accent: #C96442;
+      --agent: #4A6FA5;
+      --hover: #F0EEE6;
+      --shadow: 0 8px 32px #1f1e1d06, 0 2px 5px #1f1e1d03;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--background);
+      color: var(--text);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 280px; }
+    main {
+      min-height: 100svh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 64px 24px 112px;
+    }
+    .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 44px; }
+    .brand svg { width: 68px; height: 68px; overflow: visible; }
+    h1 { font-size: 42px; font-weight: 550; letter-spacing: -1.8px; margin: 0; }
+    form { width: min(100%, 660px); }
+    .search {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 14px 12px 22px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px #C9644214, var(--shadow); }
+    .search > svg { width: 21px; height: 21px; color: var(--muted); flex-shrink: 0; }
+    input {
+      min-width: 0;
+      width: 100%;
+      padding: 8px 0;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text);
+      font: inherit;
+      font-size: 17px;
+    }
+    input::placeholder { color: var(--muted); opacity: 1; }
+    button {
+      display: grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      flex-shrink: 0;
+      border: 0;
+      border-radius: 11px;
+      background: var(--accent);
+      color: #FFFDF9;
+      cursor: pointer;
+    }
+    button:hover { filter: brightness(.93); }
+    button svg { width: 20px; height: 20px; }
+    a:focus-visible, button:focus-visible { outline: 2px solid var(--agent); outline-offset: 4px; }
+    nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 24px; max-width: 700px; }
+    nav a {
+      display: inline-flex;
+      align-items: center;
+      padding: 10px 13px;
+      border-radius: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: background .15s, color .15s;
+    }
+    nav a:hover { color: var(--text); background: var(--hover); }
+    .hint { display: flex; align-items: center; gap: 9px; margin: 52px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+    .hint::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--agent); flex-shrink: 0; }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --background: #1F1E1D;
+        --surface: #292826;
+        --text: #FAF9F5;
+        --muted: #B5B1A8;
+        --border: #45413A;
+        --hover: #34312C;
+        --shadow: 0 8px 32px #00000014;
+      }
+    }
+    @media (max-width: 520px) {
+      main { padding: 48px 20px 80px; }
+      .brand { margin-bottom: 32px; gap: 10px; }
+      .brand svg { width: 56px; height: 56px; }
+      h1 { font-size: 36px; }
+      .search { padding-left: 16px; gap: 10px; border-radius: 16px; }
+      input { font-size: 16px; }
+      nav { gap: 2px; margin-top: 20px; }
+      nav a { padding: 10px; }
+      .hint { margin-top: 36px; font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="brand">
+      <!-- Inline mark from tandem/branding/mark.svg; no remote assets. -->
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="340 366 340 340" aria-hidden="true">
+  <defs>
+    <linearGradient id="bg" x1="512" y1="100" x2="512" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#EE8A5F"/>
+      <stop offset="0.55" stop-color="#D2633D"/>
+      <stop offset="1" stop-color="#A9441F"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="512" cy="180" r="560" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.32"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="card" x1="512" y1="300" x2="512" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFDF9"/>
+      <stop offset="1" stop-color="#F3EEE5"/>
+    </linearGradient>
+    <linearGradient id="you" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E5764B"/>
+      <stop offset="1" stop-color="#B9512C"/>
+    </linearGradient>
+    <linearGradient id="agent" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5E86C2"/>
+      <stop offset="1" stop-color="#3D5F95"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#2B1408" flood-opacity="0.30"/>
+    </filter>
+    <filter id="iconShadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000" flood-opacity="0.22"/>
+    </filter>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#2B1408" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+  <!-- the agent's spark -->
+  <path d="M528 392 Q533 425 566 430 Q533 435 528 468 Q523 435 490 430 Q523 425 528 392 Z" fill="url(#agent)"/>
+  <path d="M580 378 Q582 391 595 393 Q582 395 580 408 Q578 395 565 393 Q578 391 580 378 Z" fill="#5E86C2" opacity="0.8"/>
+  <!-- agent pointer (blue), riding behind -->
+  <g filter="url(#soft)" transform="translate(366 392) scale(0.86)">
+    <path d="M0 0 L0 196 L50 152 L84 228 L120 212 L86 138 L148 138 Z" fill="url(#agent)" stroke="#FFFDF9" stroke-width="16" stroke-linejoin="round" paint-order="stroke"/>
+  </g>
+  <!-- your pointer (clay), in front -->
+  <g filter="url(#soft)" transform="translate(526 480) scale(0.86)">
+    <path d="M0 0 L0 196 L50 152 L84 228 L120 212 L86 138 L148 138 Z" fill="url(#you)" stroke="#FFFDF9" stroke-width="16" stroke-linejoin="round" paint-order="stroke"/>
+  </g>
+</svg>
+      <h1>Tandem</h1>
+    </header>
+    <form action="https://www.google.com/search" method="get" role="search" aria-label="Search or go to a website">
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5" stroke-linecap="round"/></svg>
+        <input type="text" name="q" aria-label="Search or enter a URL" placeholder="Search or enter a URL" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go">
+        <button type="submit" aria-label="Go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
+      </div>
+    </form>
+    <nav aria-label="Quick links">
+      <a href="https://www.google.com/">Google</a>
+      <a href="https://mail.google.com/">Gmail</a>
+      <a href="https://www.youtube.com/">YouTube</a>
+      <a href="https://www.tradingview.com/">TradingView</a>
+      <a href="https://www.quiverquant.com/">Quiver Quantitative</a>
+    </nav>
+    <p class="hint">Your agent and you share this browser.</p>
+  </main>
+  <script>
+    // Keep navigation local until the user submits. No telemetry or remote assets.
+    function destination(value) {
+      const text = value.trim();
+      if (!text) return null;
+      if (!/\s/.test(text)) {
+        // Only explicit web URLs, hostnames, IPs and localhost are navigations.
+        // Other schemes (including javascript:) remain ordinary search text.
+        const explicit = /^https?:\/\//i.test(text);
+        const host = /^(?:localhost|(?:[a-z0-9\u00a1-\uffff](?:[a-z0-9\u00a1-\uffff-]*[a-z0-9\u00a1-\uffff])?\.)+[a-z\u00a1-\uffff]{2,}|(?:\d{1,3}\.){3}\d{1,3}|\[[0-9a-f:]+\])(?::\d+)?(?:[/?#]|$)/i.test(text);
+        if (explicit || host) {
+          try {
+            const url = new URL(explicit ? text : (text.startsWith('localhost') || text.startsWith('127.') || text.startsWith('[::1]') ? 'http://' : 'https://') + text);
+            if ((url.protocol === 'https:' || url.protocol === 'http:') && url.hostname && !url.username && !url.password) return url.href;
+          } catch { /* Invalid URLs fall through to search. */ }
+        }
+      }
+      return 'https://www.google.com/search?q=' + encodeURIComponent(text);
+    }
+    document.querySelector('form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const url = destination(event.currentTarget.elements.q.value);
+      if (url) window.location.assign(url);
+    });
+  </script>
+</body>
+</html>

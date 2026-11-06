@@ -1,28 +1,36 @@
 <p align="center">
-  <img src="../tandem/docs/assets/hero.png" alt="Tandem Browser: one browser, two drivers, you and your AI agent. A real browser window showing Hermes reading Apple's stock page on TradingView." width="100%">
+  <img src="../tandem/docs/assets/icon.png" alt="Tandem app icon: a shared browser with blue agent and clay human pointers" width="96" height="96">
+</p>
+
+<h1 align="center">Tandem</h1>
+
+<p align="center">An always-on browser on your VPS, shared with your AI agent.</p>
+
+<p align="center">
+  <a href="../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C96442?style=flat-square&amp;labelColor=6B6A65" alt="License: AGPL-3.0"></a>
+  <a href="#desktop-app"><img src="https://img.shields.io/badge/desktop-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-4A6FA5?style=flat-square&amp;labelColor=6B6A65" alt="Desktop: macOS, Windows, Linux"></a>
+  <a href="https://github.com/Samin12/tandem-browser/releases"><img src="https://img.shields.io/badge/release-preview-C96442?style=flat-square&amp;labelColor=6B6A65" alt="Release: preview"></a>
 </p>
 
 <p align="center">
-  <b>Your browser lives on your server. Your AI agent drives it around the clock.<br>
-  Open it from any computer to watch, or take the wheel.</b>
+  <a href="#install-it-with-your-agent"><b>Install with your agent</b></a> ·
+  <a href="#install-by-hand">Install by hand</a> ·
+  <a href="#desktop-app">Desktop app</a> ·
+  <a href="#connect-your-agent">Connect your agent</a> ·
+  <a href="../UPSTREAM.md">Upstream updates</a>
 </p>
 
 <p align="center">
-  <a href="#install-it-with-your-agent"><b>Copy the install prompt</b></a> ·
-  <a href="#install-by-hand"><b>Install by hand</b></a> ·
-  <a href="#desktop-app"><b>Desktop app</b></a> ·
-  <a href="#connect-your-agent"><b>Connect your agent</b></a> ·
-  <a href="../UPSTREAM.md"><b>How it stays up to date</b></a>
+  <img src="../tandem/docs/assets/hero.png" alt="Tandem. One browser, two drivers: you and your agent. A real Tandem session shows Hermes reading Apple's TradingView page." width="100%">
 </p>
 
-<p align="center"><sub>A fork of <a href="https://github.com/browseros-ai/BrowserOS">BrowserOS neo</a> · AGPL-3.0 · Linux VPS (amd64/arm64) · desktop app for macOS, Windows, Linux</sub></p>
+<p align="center"><sub>Built on <a href="https://github.com/browseros-ai/BrowserOS">BrowserOS neo</a> · AGPL-3.0 · Linux VPS (amd64/arm64)</sub></p>
 
 ## Why Tandem
 
-AI agents are good at the boring parts of the web: checking dashboards, reading
-inboxes, pulling numbers. But they need a real, signed-in browser, and they need
-it all day, not just while your laptop is open. Tandem puts that browser on your
-server and lets you share it with your agent.
+Give your agent a real, signed-in browser for dashboards, inboxes and research.
+Tandem runs on your server, even when your laptop is closed. Open the desktop
+app or any browser to see the same tabs, watch the agent work or take over.
 
 <p align="center">
   <img src="../tandem/docs/assets/benefits.png" alt="Six benefits: always on, same tabs on any computer, take the wheel anytime, locked down, works with your agent, stays current." width="100%">
@@ -30,9 +38,8 @@ server and lets you share it with your agent.
 
 ## See it
 
-The agent opens a page; you watch it live. Press **Manual** and the agent pauses
-while you click, type and scroll. Hand back, and it carries on. These are real
-screenshots from a Tandem server.
+Watch your agent work live. Press **Manual** to click, type and scroll yourself;
+hand back when you're done. These are real screenshots from a Tandem server.
 
 | Hermes is driving (Watch mode) | You took the wheel (Manual mode) |
 | --- | --- |
@@ -44,16 +51,19 @@ screenshots from a Tandem server.
 | **Agent** | Your agent | Any tab you pick, view only |
 | **Manual** | You | Full control; the agent's browser actions wait until you hand back |
 
+**Stream modes.** Choose **Smooth** (video, WebRTC) or **Sharp** (text, noVNC)
+from the **⋯** menu.
+
 ## How it connects
 
 <p align="center">
   <img src="../tandem/docs/assets/connects.png" alt="Diagram: the desktop app or any web browser connects over HTTPS to your VPS, where the Tandem gateway sits in front of the unmodified BrowserOS neo engine. Hermes, Claude Code, Codex or any MCP client connects to the same gateway with MCP." width="100%">
 </p>
 
-Tandem doesn't rebuild Chromium. It runs BrowserOS neo's official engine image
-unchanged and adds a small gateway in front of it: login with 2FA, the live view,
-your clicks and keys, the control modes and an MCP proxy. Only that gateway can
-reach the browser; its debugging ports never leave the server.
+One gateway connects you and your agent to the same browser. It handles login
+with 2FA, the live view, clicks and keys, control modes and MCP access. Behind
+it, the official BrowserOS neo engine image runs unchanged. Only the gateway can
+reach the browser; debugging ports stay private on the server.
 
 <a id="install-it-with-your-agent"></a>
 
@@ -65,7 +75,7 @@ You need a Linux VPS (2 vCPU and 4 GB RAM or more) you can SSH into as root, or 
 Hostinger VPS plus a Hostinger API token.
 
 ```text
-Install Tandem Browser for me: an always-on BrowserOS neo browser on my Linux
+Install Tandem Browser for me: an always-on browser on my Linux
 VPS that my AI agent drives over MCP and that I can watch or control from my own
 computer. Repository: https://github.com/Samin12/tandem-browser
 Read these first: README (.github/README.md), tandem/deploy/README.md,
@@ -164,8 +174,8 @@ Privacy & Security → Open Anyway**. No app? Any browser works:
 
 ## Connect your agent
 
-Tandem speaks MCP through the gateway, with BrowserOS neo's browser tools
-(`run`, `tabs`, `navigate`, `snapshot`, `act`, `read`, `screenshot` and more).
+Tandem works with any MCP agent through the gateway. It exposes the engine's
+browser tools (`run`, `tabs`, `navigate`, `snapshot`, `act`, `read`, `screenshot` and more).
 
 ```yaml
 # Hermes: ~/.hermes/config.yaml   (token in ~/.hermes/.env as TANDEM_AGENT_TOKEN)

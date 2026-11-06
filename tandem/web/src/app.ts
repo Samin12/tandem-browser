@@ -1,4 +1,7 @@
 import { loadBrand } from './brand';
+import { persistStream, readStream } from './neo-transport';
+import type { StreamPreference } from './neo-transport';
+import { pageTitle } from './title';
 import { NeoView } from './neo';
 import type { NeoStatus } from './neo';
 import { selectView, persistView } from './view';
@@ -18,6 +21,7 @@ const mac = window.tandemDesktop ? window.tandemDesktop.platform === 'darwin' : 
 let brand: Brand;
 const viewStorage = { getItem: (key: string) => localStorage.getItem(key), setItem: (key: string, value: string) => localStorage.setItem(key, value) };
 let view = selectView(location.search, viewStorage);
+let stream = readStream(viewStorage);
 let neo: NeoView | undefined;
 let neoStatus: NeoStatus = 'connecting';
 const logo = document.querySelector<HTMLElement>('.brand-mark')!;
@@ -69,7 +73,9 @@ function applyView() {
     tabRow.prepend(logo); tabRow.append($('connection')); document.querySelector('.toolbar')!.append(toolbarRight);
     $('control-banner').append($('banner-action')); neo?.stop();
   }
-  $('switch-view').textContent = view === 'neo' ? 'Lite view' : 'Neo view';
+  $('stream-setting').hidden = view !== 'neo';
+  renderStream();
+  $('switch-view').textContent = view === 'neo' ? 'Lite view' : 'Full browser';
 }
 function switchView(next: View) {
   releaseInputs();
@@ -186,7 +192,7 @@ function render() {
   renderConnection();
   canvas.setAttribute('aria-label', enabled ? 'Remote browser page. Click to focus, then type or use the keyboard.' : `${driver}. Take manual control to interact.`);
   const titled = view === 'neo' ? tabs.find(item => item.targetId === activeId) : current;
-  document.title = titled?.title ? `${titled.title} — Tandem Browser` : 'Tandem Browser';
+  document.title = pageTitle(titled?.title ?? '');
   neo?.setControl(control, connected);
   renderDialog();
 }
@@ -457,6 +463,17 @@ $('reload').onclick = () => runCommand(tab()?.loading ? 'stop' : 'reload'); $('d
 $('banner-action').onclick = () => setMode(control.yours ? preference : 'manual');
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-mode]')) button.onclick = () => setMode(button.dataset.mode as 'watch' | 'agent' | 'manual');
 $('menu-button').onclick = () => { const menu = $('menu'); menu.hidden = !menu.hidden; $('menu-button').setAttribute('aria-expanded', String(!menu.hidden)); if (!menu.hidden) $('switch-view').focus(); };
+function renderStream() {
+  $('stream-smooth').setAttribute('aria-pressed', String(stream === 'smooth'));
+  $('stream-sharp').setAttribute('aria-pressed', String(stream === 'sharp'));
+}
+function setStream(next: StreamPreference) {
+  closeMenu();
+  if (next === stream) return;
+  stream = next; persistStream(stream, viewStorage); renderStream(); neo?.setStream(stream);
+}
+$('stream-smooth').onclick = () => setStream('smooth');
+$('stream-sharp').onclick = () => setStream('sharp');
 function closeMenu() { $('menu').hidden = true; $('menu-button').setAttribute('aria-expanded', 'false'); }
 document.addEventListener('click', event => { if (!(event.target as HTMLElement).closest('.menu-wrap')) closeMenu(); });
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('menu').hidden) { closeMenu(); $('menu-button').focus(); } });
@@ -471,7 +488,7 @@ function resized() { draw(); clearTimeout(viewportTimer); viewportTimer = setTim
 new ResizeObserver(resized).observe(canvas); window.addEventListener('resize', resized);
 window.addEventListener('pagehide', () => { stopped = true; send({ t: 'follow', enabled: false }); neo?.stop(); releaseInputs(); unsubscribe?.(); clearInterval(pingTimer); clearTimeout(reconnectTimer); socket?.close(); frame?.image.close(); });
 async function start() { try { brand = await loadBrand();
-  neo = new NeoView($('neo-window'), mac, brand.colors.background || '#FAF9F5', status => { neoStatus = status; renderConnection(); }, notify, () => setMode('manual'), send);
+  neo = new NeoView($('neo-window'), mac, brand.colors.background || '#FAF9F5', status => { neoStatus = status; renderConnection(); }, notify, () => setMode('manual'), send, stream);
   applyView(); render(); draw(); await connect(); } catch (error) { notify(error instanceof Error ? error.message : 'Unable to start browser.'); } }
 applyView();
 void start();
