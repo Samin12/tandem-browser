@@ -42,7 +42,9 @@ export class NekoView {
     // neko paints the X pointer on a canvas for everyone but its host. In Tandem that's
     // the parked pointer while the agent drives: a second, frozen arrow. The host
     // already gets the remote cursor as its own pointer, so drop the painted one.
-    for (const canvas of container.querySelectorAll('canvas')) canvas.style.display = 'none';
+    // visibility, not display: neko maps every pointer position from this canvas's
+    // bounding box, and a display:none box is 0x0, which pins input to the corner.
+    for (const canvas of container.querySelectorAll('canvas')) canvas.style.visibility = 'hidden';
     client.mute(); client.setScrollInverse(false);
     // Even if neko's host event beats Tandem's acknowledgment, no device may send input.
     for (const method of ['key', 'move', 'button', 'scroll', 'touch'] as const) {
