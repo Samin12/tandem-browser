@@ -152,13 +152,13 @@ export class AgentCdpProxy {
   constructor(private config: Config, private control: Control, private audit: Audit, private cdp: Cdp) {}
   reserve() { if (this.sockets.size + this.reservations >= CDP_LIMIT) return false; this.reservations++; return true; }
   release() { this.reservations--; }
-  async discovery(path: string, token?: string) {
+  async discovery(path: string, token?: string, origin = this.config.origins[0]!) {
     if (!['/json', '/json/list', '/json/version'].includes(path)) return Response.json({ error: 'not_found' }, { status: 404 });
     try {
       const url = new URL(path, this.config.cdpUrl);
       const response = await fetch(url, { headers: { host: url.host }, redirect: 'manual', signal: AbortSignal.timeout(5000) });
       if (!response.ok) throw 0;
-      return Response.json(rewriteCdp(await response.json(), this.config.origins[0]!, token));
+      return Response.json(rewriteCdp(await response.json(), origin, token));
     } catch { return Response.json({ error: 'upstream_unavailable' }, { status: 502 }); }
   }
   async socket(path: string) {

@@ -91,14 +91,15 @@ export function createGateway(config: Config) {
     // Viewer files keep fixed names, so browsers must revalidate them after a deploy.
     return new Response(file, { headers: { 'cache-control': 'no-cache' } });
   }
-  async function route(req: Request, server: Server<SocketData>): Promise<Response | undefined> {
+  async function route(req: Request, server: Server<SocketData>, privateListener: boolean): Promise<Response | undefined> {
     const url = new URL(req.url), path = url.pathname;
+    if (config.viewerAuth === 'tailscale' && !privateListener && path !== '/mcp' && path !== '/cdp' && !path.startsWith('/cdp/') && !(path === '/api/health' && req.method === 'GET')) return fail('not_found', 404);
     if (path === '/cdp' || path.startsWith('/cdp/')) {
       if (!config.agentCdp) return fail('not_found', 404);
       const target = cdpRoute(path);
       if (!agentAuthorized(req, config.agentToken, target?.token)) return fail('unauthorized', 401);
       if (!target || req.method !== 'GET') return fail('not_found', 404);
-      if (!target.socket) return agentCdp.discovery(target.path, target.token);
+      if (!target.socket) return agentCdp.discovery(target.path, target.token, config.viewerAuth === 'tailscale' && !privateListener ? config.origins[1] : undefined);
       if (req.headers.get('upgrade')?.toLowerCase() !== 'websocket') return fail('not_found', 404);
       if (!agentCdp.reserve()) return fail('too_many_connections', 429);
       let upstream: WebSocket;
@@ -114,12 +115,21 @@ export function createGateway(config: Config) {
       server.timeout(req, 0);
       return mcp.handle(req);
     }
+    if (config.viewerAuth === 'tailscale' && path === '/api/login' && req.method === 'POST') return fail('not_found', 404);
+    const tailscaleUser = req.headers.get('tailscale-user-login')?.trim() ?? '';
+    if (config.viewerAuth === 'tailscale' && !(path === '/api/health' && req.method === 'GET') && (!tailscaleUser || (config.tailscaleUsers.length && !config.tailscaleUsers.includes(tailscaleUser.toLowerCase())))) return fail('tailscale_required', 403);
     if (!checkOrigin(req, config.origins, path === '/ws' || path === '/desktop/websockify' || path === '/neko/api/ws')
       || (path.startsWith('/neko/') && req.headers.has('origin') && !config.origins.includes(req.headers.get('origin')!))) return fail('forbidden_origin', 403);
     if (path === '/api/health' && req.method === 'GET') return Response.json({ ok: cdp.connected && mcp.healthy, cdp: cdp.connected, mcp: mcp.healthy, neko: await neko.health(), version: VERSION });
     // A bearer credential is intentionally never a viewer credential, even alongside a cookie.
     if (req.headers.has('authorization')) return fail('unauthorized', 401);
-    if (path === '/api/auth-config' && req.method === 'GET') return Response.json({ totp: !!config.totpSecret, productName: brand.productName ?? 'Tandem Browser' });
+    if (config.viewerAuth === 'tailscale' && (path === '/login' || path === '/login.html') && req.method === 'GET') {
+      if (sessions.fromRequest(req)) return new Response(null, { status: 302, headers: { location: '/', 'cache-control': 'no-store' } });
+      const { token, session } = sessions.create();
+      audit.write('human', 'login.ok', { via: 'tailscale', user: tailscaleUser }, { sessionId: session.id });
+      return new Response(null, { status: 302, headers: { location: '/', 'cache-control': 'no-store', 'set-cookie': sessionCookie(token, config, config.origins[0]!) } });
+    }
+    if (path === '/api/auth-config' && req.method === 'GET') return Response.json({ mode: config.viewerAuth, totp: !!config.totpSecret, productName: brand.productName ?? 'Tandem Browser' });
     if (path === '/api/login' && req.method === 'POST') {
       if (!req.headers.get('content-type')?.startsWith('application/json')) return fail('json_required', 415);
       const ip = clientIp(req, server.requestIP(req)?.address ?? 'unknown');
@@ -253,11 +263,11 @@ export function createGateway(config: Config) {
       send(ws, { t: 'error', code: error instanceof NotInControl ? 'not_in_control' : 'command_failed', message: 'Invalid command or browser unavailable', reqId: typeof m.reqId === 'string' ? m.reqId : undefined });
     }
   }
-  const server = Bun.serve<SocketData>({
-    hostname: config.hostname, port: config.port, maxRequestBodySize: 2 * 1024 * 1024, idleTimeout: 255,
+  const listen = (hostname: string, port: number, privateListener = false) => Bun.serve<SocketData>({
+    hostname, port, maxRequestBodySize: 2 * 1024 * 1024, idleTimeout: 255,
     fetch: async (req, srv) => {
       const path = new URL(req.url).pathname;
-      try { const response = await route(req, srv); return response ? secureResponse(path, response) : undefined; }
+      try { const response = await route(req, srv, privateListener); return response ? secureResponse(path, response) : undefined; }
       catch { log('request.failed', { method: req.method }); return secureResponse(path, fail('internal_error', 500)); }
     },
     websocket: {
@@ -309,6 +319,8 @@ export function createGateway(config: Config) {
       close(ws) { if (ws.data.kind === 'cdp') { agentCdp.detach(ws); return; } if (ws.data.kind === 'neko') neko.detach(ws); follow.set(ws, false); viewers.delete(ws); desktops.delete(ws); screencasts.unsubscribe(ws); ws.data.upstream?.close(); control.disconnected(ws.data.sessionId); },
     },
   });
+  const server = listen(config.hostname, config.port);
+  const privateServer = config.viewerAuth === 'tailscale' ? listen(config.privateListen!.hostname, config.privateListen!.port, true) : undefined;
   const timer = setInterval(() => {
     sessions.sweep(); limiter.sweep(); neko.sweep();
     for (const ws of [...viewers, ...desktops]) {
@@ -318,11 +330,12 @@ export function createGateway(config: Config) {
   }, 1000);
   cdp.start(); mcp.start(); neko.start(); log('gateway.started', { port: server.port! });
   if (control.controller === 'agent') void parkPointer();
-  return { server, sessions, control, cdp, mcp, audit, neko, async close() {
+  return { server, privateServer, sessions, control, cdp, mcp, audit, neko, async close() {
     clearInterval(timer); clearTimeout(tabsTimer); follow.close(); agentCdp.close(); mcp.close(); screencasts.close(); cdp.close();
     await neko.close();
     for (const ws of [...viewers, ...desktops]) ws.terminate();
     // Bun 1.3 can leave stop() pending after a completed WebSocket close handshake.
-    void server.stop(true); server.unref(); control.close(); sessions.close(); audit.close();
+    for (const listener of [server, privateServer]) if (listener) { void listener.stop(true); listener.unref(); }
+    control.close(); sessions.close(); audit.close();
   } };
 }

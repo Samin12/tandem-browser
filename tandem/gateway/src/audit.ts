@@ -5,7 +5,7 @@ type Actor = 'human' | 'agent' | 'system';
 export interface AuditEntry { ts: string; actor: Actor; sessionId?: string; ip?: string; event: string; detail: Record<string, unknown> }
 const allowed: Record<string, string[]> = {
   'cdp.connect': [], 'cdp.disconnect': ['durationMs', 'messages', 'held', 'rejected', 'topMethods'],
-  'login.ok': [], 'login.fail': [], logout: [],
+  'login.ok': ['via', 'user'], 'login.fail': [], logout: [],
   'control.take': [], 'control.release': [], 'control.auto_release': [],
   'tab.new': ['targetId', 'origin'], 'tab.close': ['targetId'], 'tab.activate': ['targetId'], 'nav.go': ['targetId', 'origin'],
   'agent.tool': ['name', 'heldMs', 'outcome'], 'agent.denied': ['name', 'heldMs', 'outcome'], 'desktop.open': [],
@@ -27,6 +27,8 @@ export class Audit {
       else if (['durationMs', 'messages', 'held', 'rejected'].includes(key) && typeof value === 'number' && Number.isFinite(value)) safe[key] = Math.max(0, Math.round(value));
       else if (key === 'topMethods' && Array.isArray(value)) safe[key] = value.slice(0, 10).filter(v => v && typeof v.method === 'string' && /^[A-Za-z]+(?:\.[A-Za-z]+)?$/.test(v.method) && v.method.length <= 100 && Number.isSafeInteger(v.count) && v.count > 0).map(v => ({ method: v.method, count: v.count }));
       else if (key === 'outcome' && ['ok', 'error', 'timeout', 'cancelled'].includes(String(value))) safe[key] = value;
+      else if (key === 'via' && value === 'tailscale') safe[key] = value;
+      else if (key === 'user' && typeof value === 'string' && value.length <= 320 && !/[\u0000-\u001f\u007f]/.test(value)) safe[key] = value;
     }
     const entry: AuditEntry = { ts: new Date().toISOString(), actor, ...context, event, detail: safe };
     writeSync(this.fd, `${JSON.stringify(entry)}\n`);

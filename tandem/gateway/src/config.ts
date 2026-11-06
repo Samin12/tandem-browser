@@ -3,6 +3,7 @@ import { decodeBase32 } from './security';
 
 export interface Config {
   hostname: string; port: number; origins: string[]; production: boolean;
+  viewerAuth: 'password' | 'tailscale'; privateListen?: { hostname: string; port: number }; tailscaleUsers: string[];
   passwordHash: string; totpSecret?: string; agentToken: string; dataDir: string;
   idleMs: number; maxMs: number; holdMs: number; displayScale: number; cdpUrl: string; agentCdp: boolean;
   mcpUrl: string; novncUrl: string; nekoUrl?: string; nekoUserPassword?: string; nekoApiToken?: string; publicDir: string; brandFile: string;
@@ -22,14 +23,20 @@ export async function loadConfig(env: Record<string, string | undefined> = proce
     } catch { fail('TANDEM_PUBLIC_ORIGIN', 'expected exact http(s) origins without paths'); }
     if (production && !origin.startsWith('https:')) fail('TANDEM_PUBLIC_ORIGIN', 'production requires https origins');
   }
-  if (production && env.TANDEM_PASSWORD !== undefined) fail('TANDEM_PASSWORD', 'development only; use TANDEM_PASSWORD_HASH');
-  let passwordHash = env.TANDEM_PASSWORD_HASH;
-  if (!passwordHash && env.TANDEM_PASSWORD) passwordHash = await Bun.password.hash(env.TANDEM_PASSWORD, { algorithm: 'argon2id' });
-  if (!passwordHash?.startsWith('$argon2id$')) fail('TANDEM_PASSWORD_HASH', 'a valid Argon2id hash is required');
-  try { await Bun.password.verify('configuration-validation', passwordHash!); } catch { fail('TANDEM_PASSWORD_HASH', 'invalid Argon2id hash'); }
+  const viewerAuth = env.TANDEM_VIEWER_AUTH ?? 'password';
+  if (viewerAuth !== 'password' && viewerAuth !== 'tailscale') fail('TANDEM_VIEWER_AUTH', 'expected password or tailscale');
+  let passwordHash = '', totpSecret: string | undefined;
+  if (viewerAuth === 'password') {
+    if (production && env.TANDEM_PASSWORD !== undefined) fail('TANDEM_PASSWORD', 'development only; use TANDEM_PASSWORD_HASH');
+    passwordHash = env.TANDEM_PASSWORD_HASH ?? '';
+    if (!passwordHash && env.TANDEM_PASSWORD) passwordHash = await Bun.password.hash(env.TANDEM_PASSWORD, { algorithm: 'argon2id' });
+    if (!passwordHash.startsWith('$argon2id$')) fail('TANDEM_PASSWORD_HASH', 'a valid Argon2id hash is required');
+    try { await Bun.password.verify('configuration-validation', passwordHash); } catch { fail('TANDEM_PASSWORD_HASH', 'invalid Argon2id hash'); }
+    totpSecret = env.TANDEM_TOTP_SECRET;
+  }
   if (!env.TANDEM_AGENT_TOKEN || env.TANDEM_AGENT_TOKEN.length < 32) fail('TANDEM_AGENT_TOKEN', 'required, at least 32 characters');
-  if (env.TANDEM_TOTP_SECRET) {
-    try { if (decodeBase32(env.TANDEM_TOTP_SECRET).length === 0) throw 0; } catch { fail('TANDEM_TOTP_SECRET', 'expected a non-empty base32 secret'); }
+  if (totpSecret) {
+    try { if (decodeBase32(totpSecret).length === 0) throw 0; } catch { fail('TANDEM_TOTP_SECRET', 'expected a non-empty base32 secret'); }
   }
   const positive = (key: string, fallback: number) => {
     const n = Number(env[key] ?? fallback);
@@ -48,11 +55,19 @@ export async function loadConfig(env: Record<string, string | undefined> = proce
     if (url.pathname !== '/' || url.search) fail('TANDEM_NEKO_URL', 'expected an http(s) origin without a path or query');
   }
   if (!['on', 'off'].includes(env.TANDEM_CDP ?? 'on')) fail('TANDEM_CDP', 'expected on or off');
-  const listen = /^(\[[\da-fA-F:]+\]|[^:]+):(\d+)$/.exec(env.TANDEM_LISTEN ?? '0.0.0.0:8790');
-  if (!listen || Number(listen[2]) < 1 || Number(listen[2]) > 65535) fail('TANDEM_LISTEN', 'expected host:port (1–65535)');
+  const parseListen = (key: string, value: string) => {
+    const listen = /^(\[[\da-fA-F:]+\]|[^:]+):(\d+)$/.exec(value);
+    if (!listen || Number(listen[2]) < 1 || Number(listen[2]) > 65535) fail(key, 'expected host:port (1–65535)');
+    return { hostname: listen![1]!.replace(/^\[|\]$/g, ''), port: Number(listen![2]) };
+  };
+  const listen = parseListen('TANDEM_LISTEN', env.TANDEM_LISTEN ?? '0.0.0.0:8790');
+  if (viewerAuth === 'tailscale' && !env.TANDEM_PRIVATE_LISTEN) fail('TANDEM_PRIVATE_LISTEN', 'required in tailscale mode');
+  const privateListen = env.TANDEM_PRIVATE_LISTEN === undefined ? undefined : parseListen('TANDEM_PRIVATE_LISTEN', env.TANDEM_PRIVATE_LISTEN);
+  if (privateListen && privateListen.hostname.toLowerCase() === listen.hostname.toLowerCase() && privateListen.port === listen.port) fail('TANDEM_PRIVATE_LISTEN', 'must differ from TANDEM_LISTEN');
   return {
-    hostname: listen![1]!.replace(/^\[|\]$/g, ''), port: Number(listen![2]), origins, production,
-    passwordHash: passwordHash!, agentToken: env.TANDEM_AGENT_TOKEN!, totpSecret: env.TANDEM_TOTP_SECRET,
+    ...listen, origins, production, viewerAuth: viewerAuth as Config['viewerAuth'], privateListen,
+    tailscaleUsers: (env.TANDEM_TAILSCALE_USERS ?? '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
+    passwordHash, agentToken: env.TANDEM_AGENT_TOKEN!, totpSecret,
     dataDir: resolve(env.TANDEM_DATA_DIR ?? '/var/lib/tandem'),
     idleMs: positive('TANDEM_SESSION_IDLE_HOURS', 12) * 3600000,
     maxMs: positive('TANDEM_SESSION_MAX_HOURS', 72) * 3600000,
