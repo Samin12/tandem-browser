@@ -41,6 +41,16 @@ secret manager/environment, not shell command history. The plaintext install
 password is consumed over stdin by `bun run hash-password` and never saved to
 production `.env`. Review `.env.example` for every supported variable.
 
+For the Hostinger Docker Manager stack (`hostinger/compose.yaml`), run
+`TANDEM_HOST=browser.example.com bash hostinger/tailscale.sh` as root on the VPS
+to install/connect Tailscale and configure Tailscale Serve. Apply the printed
+`.env` lines, set `TANDEM_TAILSCALE_USERS` to your allowed login names, and
+recreate the stack. Open the printed tailnet HTTPS origin in the web viewer and
+desktop app: sign-in is automatic without password/TOTP. The private port is
+published only on host loopback; the public hostname keeps bearer-protected
+agent endpoints and health, and returns 404 for viewer routes. Keep device
+approval enabled; see [Tailscale mode](../docs/SECURITY.md#tailscale-mode).
+
 `.env` is mode 0600. The installer escapes each `$` in Argon2id hashes as `$$`
 because Docker Compose interpolates env files. Do the same when editing by hand.
 Do not shell-source this file: its format is Compose dotenv, not shell syntax.

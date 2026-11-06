@@ -5,7 +5,7 @@
 # project's .env, so policies and the start page are inline and the gateway image is built
 # on the VPS by build-gateway.sh. The template's Traefik (host
 # network, Let's Encrypt resolver "letsencrypt") terminates HTTPS and reaches the
-# gateway on the neo container's address; no host port is published.
+# gateway on the neo container's address; the private viewer port stays on host loopback.
 #
 # .env (Docker Manager "environment"): TANDEM_HOST, TANDEM_NEO_IMAGE, optional
 # TANDEM_GATEWAY_IMAGE, and the gateway's TANDEM_* settings (see ../.env.example).
@@ -67,6 +67,8 @@ services:
       - source: tandem-start-page
         target: /opt/tandem/start/index.html
     ports:
+      # Private viewer for tailscale serve on the host; never publish to the internet.
+      - '127.0.0.1:${TANDEM_PRIVATE_PORT:-8791}:8791'
       # WebRTC media for neko (UDP, with TCP as a fallback).
       - '${TANDEM_WEBRTC_PORT:-59000}:59000/udp'
       - '${TANDEM_WEBRTC_PORT:-59000}:59000/tcp'
@@ -151,7 +153,7 @@ services:
       TANDEM_DISPLAY_SCALE: ${TANDEM_DISPLAY_SCALE:-2}
       TANDEM_ENV: production
       TANDEM_DATA_DIR: /var/lib/tandem
-      TANDEM_PUBLIC_ORIGIN: https://${TANDEM_HOST}
+      TANDEM_PUBLIC_ORIGIN: ${TANDEM_PUBLIC_ORIGIN:-https://${TANDEM_HOST}}
     volumes:
       - gateway-data:/var/lib/tandem
     read_only: true

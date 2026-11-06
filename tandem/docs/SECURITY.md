@@ -7,11 +7,38 @@ anyone who can control it as someone holding all of those logins.
 
 | Surface | Exposed to | Protection |
 |---|---|---|
-| `https://<domain>` (viewer, desktop app) | Internet, port 443 | Caddy TLS (Let's Encrypt) + HSTS; password (argon2id) + TOTP; per-IP login rate limit; HttpOnly/Secure/SameSite=Strict session cookie; Origin checks on every write and WebSocket; idle (12 h) and absolute (72 h) session expiry |
+| `https://<domain>` (viewer, desktop app, password mode) | Internet, port 443 | Caddy/Traefik TLS (Let's Encrypt) + HSTS; password (argon2id) + TOTP; per-IP login rate limit; HttpOnly/Secure/SameSite=Strict session cookie; Origin checks on every write and WebSocket; idle (12 h) and absolute (72 h) session expiry |
+| `https://<name>.<tailnet>.ts.net` (viewer, desktop app, Tailscale mode) | Tailnet only, via Tailscale Serve | Tailscale user identity and optional login allowlist; same session cookie, Origin checks and expiry; public viewer routes return 404 |
 | `https://<domain>/mcp` | Internet, port 443 | Separate 48-char bearer token, constant-time check, valid on `/mcp` and `/cdp` |
 | `https://<domain>/cdp[/TOKEN]/*` | Internet, port 443 | Same agent token as MCP; constant-time check, explicit discovery/socket routes, human-control gating, eight-connection cap |
-| `127.0.0.1:8790` | The VPS itself (Hermes running there) | Same auth as above; not reachable from outside |
+| `127.0.0.1:8790` (loopback deployments) | The VPS itself (Hermes running there) | Same auth as above; in Tailscale mode only agent paths and `GET /api/health` are served |
+| `127.0.0.1:8791` (Hostinger private listener) | Host loopback, proxied by Tailscale Serve | Viewer requires `Tailscale-User-Login` on every request; agent paths still require bearer auth |
 | CDP 9110, Neo API 9010, noVNC 6080, VNC 5900 | **Nobody outside the engine's network namespace** | Never published. Only trusted Tandem sidecars share that namespace; no raw upstream port is published. |
+
+## Tailscale mode
+
+Set `TANDEM_VIEWER_AUTH=tailscale` and `TANDEM_PRIVATE_LISTEN=0.0.0.0:8791`.
+The viewer is reachable only over the tailnet; identity comes from Tailscale
+Serve's `Tailscale-User-Login` header. The public listener serves only `/mcp`,
+`/cdp`, `/cdp/*` and `GET /api/health`, so internet requests cannot reach viewer
+pages, assets, APIs or sockets, even with a forged identity header or cookie.
+The private listener is published only through host loopback (`127.0.0.1:8791`);
+only Tailscale Serve and trusted host processes should reach it. Never publicly
+publish that port or proxy public traffic to it: it trusts Serve's header.
+
+`GET /login` creates the usual session and redirects back to the viewer without
+a password or TOTP; expired sessions sign in again silently. Password hashes and
+TOTP secrets are ignored. Keep the tailnet HTTPS origin first in
+`TANDEM_PUBLIC_ORIGIN`, followed by the public agent origin (second, for public
+CDP discovery URLs). The Electron app
+loads the same tailnet origin and uses the same session checks.
+
+Anyone with a device on the tailnet logged in as an allowed user gets the viewer.
+Keep `TANDEM_TAILSCALE_USERS` set to your login names (comma-separated,
+case-insensitive; empty allows any Tailscale user), and keep Tailscale device
+approval on. Agent bearer authentication remains unchanged on both listeners.
+Run [hostinger/tailscale.sh](../deploy/hostinger/tailscale.sh) on the host to
+install/connect Tailscale and configure its private HTTPS proxy.
 
 ## What the viewer never gets
 
@@ -59,7 +86,7 @@ with its built-in key (`--password-store=basic`). Anyone who can read
 
 - [ ] DNS points only the Tandem hostname at the VPS.
 - [ ] `ufw status` shows only 22, 80, 443 open.
-- [ ] TOTP is set (`./tandem totp-setup`).
+- [ ] TOTP is set in password mode (`./tandem totp-setup`); in Tailscale mode, the user allowlist and device approval are enabled.
 - [ ] SSH password login disabled.
 - [ ] Backups configured with an `age` recipient you hold offline.
 - [ ] `TANDEM_AGENT_TOKEN` stored in 1Password and Hermes `.env`, nowhere else.
