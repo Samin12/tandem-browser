@@ -13,6 +13,7 @@ of declared breaking changes is not a guarantee of compatibility.
 
 ### Tandem changes
 
+- Add a native Hermes plugin with Tandem browser provider, MCP setup, status commands and shared-control skill.
 - Refresh the viewer, desktop app, start page and README graphics with a calmer cloud-blue brand.
 
 - Add an offline Tandem start page with search/URL navigation, quick links, and

@@ -1,7 +1,7 @@
 ---
 name: tandem-browser
 description: "Use the Tandem Browser (server-hosted BrowserOS neo) for any web task; share it safely with the human, who can watch and take control."
-version: 0.1.0
+version: 0.2.0
 author: Tandem Browser
 license: AGPL-3.0
 metadata:
@@ -12,16 +12,19 @@ metadata:
 # Tandem Browser
 
 Tandem Browser is a real, always-on browser on the user's server, signed in to
-their accounts. You drive it through the `tandem` MCP server (BrowserOS neo's
-tools: `run`, `tabs`, `navigate`, `snapshot`, `act`, `read`, `grep`,
-`screenshot`, …). The user watches the same tabs live from their Mac or a web
-page and can take control at any moment.
+their accounts. If `mcp__tandem__*` tools are available, use the richer Tandem
+MCP tools (`run`, `tabs`, `navigate`, `snapshot`, `act`, `read`, `grep`,
+`screenshot`, …). Otherwise Hermes's built-in browser tools (`browser_exec`, or `browser_*` when Browser Use mode is off) already drive
+Tandem through its browser provider. The user watches the same tabs live from
+their Mac or a web page and can take control at any moment.
 
 ## Rules
 
-- Use the `tandem` tools for every browser task. Don't start another browser.
-- On a new connection, call `tabs` with `action:"list"` before opening anything,
-  and reuse your task's tab group (see the server's own instructions).
+- Use Tandem for every browser task, through MCP when available or the built-in
+  browser tools (`browser_exec` or `browser_*`) otherwise. Don't start another browser.
+- On a new MCP connection, call `tabs` with `action:"list"` before opening
+  anything, and reuse your task's tab group (see the server's own instructions).
+  In provider mode, use the available browser tab-list tool before opening tabs.
 - Open your own tab for new work. Leave the user's tabs and other agents' tabs as
   they are unless asked.
 - If a tool answers **"Tandem: a person has manual control of the browser"**,
