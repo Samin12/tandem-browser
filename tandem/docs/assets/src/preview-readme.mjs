@@ -86,6 +86,18 @@ try {
     await writeFile(join(output, `${name}.png`), Buffer.from(screenshot.data, 'base64'));
     console.log(`${name}.png: ${width} × ${layout.height}; verified viewport, no broken images or page overflow`);
   }
+  const tags = [...html.matchAll(/<img\b[^>]*>/g)].map(match => match[0]);
+  const escape = value => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;');
+  const sheet = `<!doctype html><html><head><meta charset="UTF-8"><title>README image audit</title><style>*{box-sizing:border-box}body{margin:0;padding:28px;background:#F7FAFD;color:#14202B;font:15px/1.4 Arial,sans-serif}h1{margin:0 0 20px;font-size:26px}main{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}figure{margin:0;border:1px solid #DCE6F0;border-radius:12px;background:white;padding:16px}figure div{height:340px;display:flex;align-items:center;justify-content:center;overflow:hidden}img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}figcaption{margin-top:12px;overflow-wrap:anywhere;font-size:13px;color:#5F6B78}</style></head><body><h1>Every README image · cloud blue audit</h1><main>${tags.map((tag, index) => `<figure><div>${tag.replace(/\s(?:width|height)="[^"]*"/g, '')}</div><figcaption>${escape(images[index] ?? `Image ${index + 1}`)}</figcaption></figure>`).join('')}</main></body></html>`;
+  const sheetPath = join(output, 'contact-sheet.html');
+  await writeFile(sheetPath, sheet);
+  await cdp('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId);
+  await cdp('Page.navigate', { url: pathToFileURL(sheetPath).href }, sessionId);
+  const ready = await cdp('Runtime.evaluate', { expression: `(async()=>{while(document.readyState!=='complete')await new Promise(r=>setTimeout(r,20));await Promise.all([...document.images].map(i=>i.decode()));return {height:document.documentElement.scrollHeight,count:document.images.length}})()`, awaitPromise: true, returnByValue: true }, sessionId);
+  if (ready.exceptionDetails || ready.result.value.count !== images.length) throw new Error('Incomplete image contact sheet');
+  const contact = await cdp('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { x: 0, y: 0, width: 1600, height: ready.result.value.height, scale: 1 } }, sessionId);
+  await writeFile(join(output, 'contact-sheet.png'), Buffer.from(contact.data, 'base64'));
+  console.log(`contact-sheet.png: ${images.length} README images`);
   await cdp('Target.closeTarget', { targetId });
 } finally {
   await cdp('Browser.close').catch(() => {});

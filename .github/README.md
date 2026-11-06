@@ -1,15 +1,15 @@
 <p align="center">
-  <img src="../tandem/docs/assets/icon.png" alt="Tandem app icon: a shared browser with blue agent and clay human pointers" width="96" height="96">
+  <img src="../tandem/docs/assets/icon.png" alt="Tandem app icon: a sky-blue squircle with two white pointers" width="96" height="96">
 </p>
 
 <h1 align="center">Tandem</h1>
 
-<p align="center">An always-on browser on your VPS, shared with your AI agent.</p>
+<p align="center">A 24/7 browser in the cloud. Control it from your desktop.</p>
 
 <p align="center">
-  <a href="../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C96442?style=flat-square&amp;labelColor=6B6A65" alt="License: AGPL-3.0"></a>
-  <a href="#desktop-app"><img src="https://img.shields.io/badge/desktop-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-4A6FA5?style=flat-square&amp;labelColor=6B6A65" alt="Desktop: macOS, Windows, Linux"></a>
-  <a href="https://github.com/Samin12/tandem-browser/releases"><img src="https://img.shields.io/badge/release-preview-C96442?style=flat-square&amp;labelColor=6B6A65" alt="Release: preview"></a>
+  <a href="../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-2F80D6?style=flat-square&amp;labelColor=14202B" alt="License: AGPL-3.0"></a>
+  <a href="#desktop-app"><img src="https://img.shields.io/badge/desktop-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-2F80D6?style=flat-square&amp;labelColor=14202B" alt="Desktop: macOS, Windows, Linux"></a>
+  <a href="https://github.com/Samin12/tandem-browser/releases"><img src="https://img.shields.io/badge/release-preview-2F80D6?style=flat-square&amp;labelColor=14202B" alt="Release: preview"></a>
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <img src="../tandem/docs/assets/hero.png" alt="Tandem. One browser, two drivers: you and your agent. A real Tandem session shows Hermes reading Apple's TradingView page." width="100%">
+  <img src="../tandem/docs/assets/hero.png" alt="Tandem. A 24/7 browser in the cloud. Control it from your desktop. The Tandem viewer shows Hermes driving on Apple's TradingView page." width="100%">
 </p>
 
 <p align="center"><sub>Built on <a href="https://github.com/browseros-ai/BrowserOS">BrowserOS neo</a> · AGPL-3.0 · Linux VPS (amd64/arm64)</sub></p>
@@ -39,11 +39,12 @@ app or any browser to see the same tabs, watch the agent work or take over.
 ## See it
 
 Watch your agent work live. Press **Manual** to click, type and scroll yourself;
-hand back when you're done. These are real screenshots from a Tandem server.
+hand back when you're done. Screenshots of the Tandem viewer, using real page
+captures in the development harness.
 
 | Hermes is driving (Watch mode) | You took the wheel (Manual mode) |
 | --- | --- |
-| <img src="../tandem/docs/assets/agent-driving.jpg" alt="Tandem viewer: Hermes has opened Apple's TradingView page; the banner says Hermes is driving." width="100%"> | <img src="../tandem/docs/assets/you-driving.jpg" alt="Tandem viewer in Manual mode on Wikipedia; the banner says You're driving, Hermes is paused, 1 waiting." width="100%"> |
+| <img src="../tandem/docs/assets/agent-driving.jpg" alt="Tandem viewer: Hermes has opened Apple's TradingView page; the banner says Hermes is driving." width="100%"> | <img src="../tandem/docs/assets/you-driving.jpg" alt="Tandem viewer in Manual mode on Wikipedia's Tandem bicycle article; the banner says You're driving, Hermes is paused." width="100%"> |
 
 | Mode | Who drives | What you see |
 | --- | --- | --- |
