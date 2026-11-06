@@ -15,6 +15,7 @@ async function setup(holdMs = 80, cdp?: Cdp) {
   let tools: any[] = [{ name: 'read', annotations: { readOnlyHint: true } }, { name: 'write', annotations: { readOnlyHint: false } }, { name: 'no-hint' }];
   const upstream = Bun.serve({ port: 0, async fetch(req) {
     if (req.method === 'DELETE') { deletions++; return new Response(null, { status: 204 }); }
+    if (req.method === 'GET' && req.headers.get('mcp-session-id') === 'stale') return new Response('session not found', { status: 404 });
     if (req.method === 'GET') return new Response('event: message\ndata: {"test":true}\n\n', { headers: { 'content-type': 'text/event-stream', 'last-event-id': req.headers.get('last-event-id') ?? '' } });
     const rpc = await req.json() as any; seen.push(rpc);
     if (rpc.id === undefined) return new Response(null, { status: 202 });
@@ -99,6 +100,11 @@ describe('MCP proxy', () => {
     const { proxy, request } = await setup();
     const response = await proxy.handle(request(undefined, 'GET')); expect(response.headers.get('last-event-id')).toBe('event-1'); expect(await response.text()).toContain('"test":true');
     expect((await proxy.handle(request(undefined, 'DELETE'))).status).toBe(204);
+  });
+  test('a client error from a stale session leaves MCP healthy', async () => {
+    const { proxy } = await setup();
+    const response = await proxy.handle(new Request('http://gateway/mcp', { method: 'GET', headers: { 'mcp-session-id': 'stale' } }));
+    expect(response.status).toBe(404); await response.body?.cancel(); expect(proxy.healthy).toBe(true);
   });
   test('passing tools/list responses refresh annotations during human control', async () => {
     const { proxy, request, control, setTools } = await setup(10); control.take('human');

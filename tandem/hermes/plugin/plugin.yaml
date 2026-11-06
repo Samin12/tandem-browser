@@ -1,0 +1,17 @@
+name: tandem
+label: Tandem Browser
+version: 0.1.0
+author: Samin Yasar
+homepage: https://github.com/Samin12/tandem-browser
+license: AGPL-3.0
+description: Drive your always-on Tandem browser while you watch or take control.
+requires_hermes: ">=0.21.5"
+kind: backend
+provides_browser_providers: [tandem]
+requires_env:
+  - name: TANDEM_URL
+    description: "Your Tandem address, e.g. https://browser.example.com"
+    secret: false
+  - name: TANDEM_AGENT_TOKEN
+    description: "Your agent token, printed by ./tandem hermes-config on the server"
+    secret: true

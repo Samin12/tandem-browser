@@ -132,7 +132,8 @@ export class McpProxy {
       const upstream = await fetch(this.config.mcpUrl, {
         method: req.method, headers: this.headers(req), ...(rpc ? { body: JSON.stringify(rpc) } : {}), signal: req.signal,
       });
-      this.healthy = upstream.ok;
+      // A client's stale session or bad request (4xx) says nothing about Neo itself.
+      this.healthy = upstream.status < 500;
       const headers = new Headers();
       for (const name of [...headerNames, 'content-type', 'cache-control']) { const value = upstream.headers.get(name); if (value) headers.set(name, value); }
       if (!upstream.body) { finish?.(upstream.ok ? 'ok' : 'error'); return new Response(null, { status: upstream.status, headers }); }
