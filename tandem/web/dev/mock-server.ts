@@ -2,7 +2,11 @@ import { resolve, sep } from 'node:path';
 import type { ServerWebSocket } from 'bun';
 import type { Control, Message, RemoteDialog, RemoteTab } from '../src/types';
 const brand = await Bun.file(resolve(import.meta.dir, '../../branding/brand.json')).json();
-const jpeg = new Uint8Array(await Bun.file(resolve(import.meta.dir, 'sample-frame.jpg')).arrayBuffer());
+// Optional local fixture for repeatable documentation captures. Production never
+// imports this server; normal visual checks retain the original sample and timing.
+const scene: { frame?: string; width?: number; height?: number; tabs?: RemoteTab[]; activeTargetId?: string; autoActivity?: boolean; pendingAgentCalls?: number } = process.env.TANDEM_DEV_SCENE
+  ? await Bun.file(process.env.TANDEM_DEV_SCENE).json() : {};
+const jpeg = new Uint8Array(await Bun.file(scene.frame || resolve(import.meta.dir, 'sample-frame.jpg')).arrayBuffer());
 const dist = resolve(import.meta.dir, '../dist');
 const password = process.env.TANDEM_DEV_PASSWORD || crypto.randomUUID();
 const totp = process.env.TANDEM_DEV_TOTP === '1';
@@ -13,12 +17,12 @@ const sockets = new Set<ServerWebSocket<SocketData>>();
 const audit: Record<string, unknown>[] = [];
 const observed: Message[] = [];
 let counter = 3, seq = 0, agentTick = 0;
-let tabs: RemoteTab[] = [
+let tabs: RemoteTab[] = scene.tabs ?? [
   { targetId: 'tab-1', url: 'https://en.wikipedia.org/wiki/Tandem_bicycle', title: 'Tandem bicycle — Wikipedia', loading: false, canGoBack: true, canGoForward: false, opener: 'agent', lastAgentActivityAt: Date.now() },
   { targetId: 'tab-2', url: 'https://example.com/research', title: 'Research notes', loading: false, canGoBack: false, canGoForward: false, opener: 'agent' },
   { targetId: 'tab-3', url: 'https://example.com/', title: 'A little space to explore', loading: false, canGoBack: false, canGoForward: false, opener: 'human' },
 ];
-let activeTargetId = 'tab-1';
+let activeTargetId = scene.activeTargetId ?? 'tab-1';
 let control: Control = { controller: 'agent', since: Date.now(), yours: false, agentBusy: false, pendingAgentCalls: 0 };
 let dialog: RemoteDialog | undefined;
 interface SocketData { sessionId: string; viewed: string; hello: boolean }
@@ -30,7 +34,7 @@ function updateControl() { for (const ws of sockets) emit(ws, { t: 'control', ..
 function updateTabs() { broadcast({ t: 'tabs', tabs, activeTargetId }); }
 function frame(ws: ServerWebSocket<SocketData>) {
   if (!ws.data.hello || ws.getBufferedAmount() > 2e6 || !tabs.some(t => t.targetId === ws.data.viewed)) return;
-  const header = new TextEncoder().encode(JSON.stringify({ targetId: ws.data.viewed, seq: ++seq, deviceWidth: 1600, deviceHeight: 913, offsetTop: 0, pageScaleFactor: 1, scrollOffsetX: 0, scrollOffsetY: 0, timestamp: Date.now() / 1000, format: 'jpeg' }));
+  const header = new TextEncoder().encode(JSON.stringify({ targetId: ws.data.viewed, seq: ++seq, deviceWidth: scene.width ?? 1600, deviceHeight: scene.height ?? 913, offsetTop: 0, pageScaleFactor: 1, scrollOffsetX: 0, scrollOffsetY: 0, timestamp: Date.now() / 1000, format: 'jpeg' }));
   const bytes = new Uint8Array(4 + header.length + jpeg.length);
   new DataView(bytes.buffer).setUint32(0, header.length, false); bytes.set(header, 4); bytes.set(jpeg, 4 + header.length); ws.send(bytes);
 }
@@ -112,7 +116,7 @@ const server = Bun.serve<SocketData>({
       let message: Message;
       try { message = JSON.parse(String(raw)); } catch { ws.close(4403); return; }
       if (!ws.data.hello && message.t !== 'hello') { ws.close(4403); return; }
-      const allowed = ['hello', 'viewport', 'view', 'control.take', 'control.release', 'ping'];
+      const allowed = ['hello', 'viewport', 'view', 'follow', 'control.take', 'control.release', 'ping'];
       if (!allowed.includes(message.t) && !controlFor(ws.data.sessionId).yours) { emit(ws, { t: 'error', code: 'not_in_control', message: 'Take manual control first.' }); return; }
       // In-memory diagnostics omit private typed/clipboard content.
       observed.push({ ...message, ...(message.t === 'input.text' ? { text: '[redacted]' } : {}), ...(message.t === 'input.key' && message.text ? { text: '[redacted]' } : {}) });
@@ -120,9 +124,9 @@ const server = Bun.serve<SocketData>({
       const target = tabs.find(t => t.targetId === message.targetId);
       switch (message.t) {
         case 'hello': ws.data.hello = true; emit(ws, { t: 'welcome', sessionId: ws.data.sessionId, brand, control: controlFor(ws.data.sessionId), tabs, activeTargetId, serverVersion: 'dev-mock' }); if (dialog) emit(ws, { t: 'dialog', ...dialog }); frame(ws); break;
-        case 'viewport': break;
+        case 'viewport': case 'follow': break;
         case 'view': if (target) { ws.data.viewed = target.targetId; frame(ws); } break;
-        case 'control.take': control = { controller: 'human', holderSessionId: ws.data.sessionId, holderLabel: 'You', since: Date.now(), yours: true, agentBusy: false, pendingAgentCalls: 2 }; record('control.take'); updateControl(); break;
+        case 'control.take': control = { controller: 'human', holderSessionId: ws.data.sessionId, holderLabel: 'You', since: Date.now(), yours: true, agentBusy: false, pendingAgentCalls: scene.pendingAgentCalls ?? 2 }; record('control.take'); updateControl(); break;
         case 'control.release': if (controlFor(ws.data.sessionId).yours) { control = { controller: 'agent', since: Date.now(), yours: false, agentBusy: false, pendingAgentCalls: 0 }; record('control.release'); updateControl(); } break;
         case 'tab.activate': if (target) { activeTargetId = target.targetId; ws.data.viewed = target.targetId; updateTabs(); frame(ws); } break;
         case 'tab.new': {
@@ -158,7 +162,7 @@ setInterval(() => {
   }
 }, 500).unref();
 setInterval(() => {
-  if (control.controller !== 'agent' || !tabs.length) return;
+  if (scene.autoActivity === false || control.controller !== 'agent' || !tabs.length) return;
   const target = tabs[agentTick++ % Math.min(tabs.length, 2)]; activeTargetId = target.targetId; target.lastAgentActivityAt = Date.now(); updateTabs();
   broadcast({ t: 'agent.activity', tool: 'browser_get_page_content', targetId: target.targetId, at: Date.now() });
 }, 4500).unref();

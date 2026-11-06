@@ -1,7 +1,7 @@
 {
   "productName": "Tandem Browser",
   "shortName": "Tandem",
-  "tagline": "One browser, two drivers: you and your agent.",
+  "tagline": "A 24/7 browser in the cloud. Control it from your desktop.",
   "description": "An always-on browser that runs on your server. Your AI agent drives it; you watch or take the wheel from any computer.",
   "appId": "com.saminyasar.tandem",
   "repository": "https://github.com/Samin12/tandem-browser",
