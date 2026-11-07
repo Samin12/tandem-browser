@@ -5,6 +5,30 @@ references), **Tandem changes**, **Compatibility** (risk, engine image pins and
 contract checks), and **Breaking** (declared migration requirements). An absence
 of declared breaking changes is not a guarantee of compatibility.
 
+## 2026-11-07 — Imported upstream 1d3c3dfa
+
+### Imported upstream
+
+Range: `55664d0af96d944d892a0b20f099b30fbfaeb3d1..1d3c3dfaa9bdec18efae4ed8fbf3606101531852` (1 commits).
+
+#### fix
+
+- `1d3c3dfa` fix(claw-server): disable desktop analytics in hosted mode (#3164)
+
+### Tandem changes
+
+- Automatic upstream source merge.
+
+### Compatibility
+
+Risk: **high**.
+
+- Sensitive upstream path: packages/browseros/docker/neo/README.md
+
+### Breaking
+
+- None declared upstream.
+
 ## 2026-11-05 — Tandem start page
 
 ### Imported upstream
