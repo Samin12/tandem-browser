@@ -29,6 +29,9 @@ Risk: **high**.
 
 - None declared upstream.
 
+- Engine image: `ghcr.io/browseros-ai/neo:0.52.1.2-1d3c3df@sha256:6b8939714b29538cb52765397cf14cbfbf71933732de19a350de1d268c51644d`.
+
+
 ## 2026-11-05 — Tandem start page
 
 ### Imported upstream
